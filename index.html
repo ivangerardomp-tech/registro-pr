@@ -446,5 +446,94 @@
 })();
 </script>
 
+
+<!-- === Captura / Estampado de PR en imagen === -->
+<style>
+  #capture-box{max-width:720px;margin:16px auto;padding:12px;border:1px solid #334155;border-radius:12px;
+    background:#0b1220;color:#cbd5e1;font-family:system-ui,Segoe UI,Roboto,Arial;}
+  #capture-box .hint{font-size:12px;opacity:.85;margin-top:6px}
+  #selectPhotoBtn[disabled], #shootBtn[disabled]{opacity:.5;cursor:not-allowed}
+</style>
+
+<div id="capture-box">
+  <strong>Foto con PR impreso</strong>
+  <div class="hint">Primero carga el KML. Luego permite GPS para calcular el PR y estamparlo dentro de la imagen.</div>
+  <div style="margin-top:8px">
+    <input id="photoInput" type="file" accept="image/*" capture="environment" style="display:none" />
+    <button id="selectPhotoBtn" class="btn" type="button" disabled>Tomar / seleccionar foto (imprime PR)</button>
+  </div>
+  <div id="captureStatus" class="hint"></div>
+</div>
+
+<script>
+(function(){
+  const selectBtn = document.getElementById('selectPhotoBtn');
+  const photoInput= document.getElementById('photoInput');
+  const statusEl  = document.getElementById('captureStatus');
+
+  // util para descargar
+  function downloadBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+  }
+
+  async function composeImageWithPR(file, prTxt){
+    return new Promise((resolve,reject)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        const c = document.createElement('canvas'); c.width=w; c.height=h;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img,0,0,w,h);
+        const barH = Math.round(h*0.10);
+        ctx.fillStyle = 'rgba(5,10,20,0.7)';
+        ctx.fillRect(0,h-barH,w,barH);
+        ctx.fillStyle = '#7dd3fc';
+        ctx.font = `bold ${Math.max(18, Math.round(barH*0.5))}px system-ui,Segoe UI,Roboto,Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`PR: ${prTxt}`, w/2, h - barH/2);
+        c.toBlob((b)=> b? resolve(b):reject(new Error('No se pudo generar imagen')), 'image/jpeg', 0.95);
+      };
+      img.onerror = (e)=>reject(new Error('Error cargando la imagen'));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  // Click en botón → abrir file input
+  selectBtn?.addEventListener('click', ()=>{
+    if (!window.routeReady){ alert('Debes cargar primero el KML.'); return; }
+    if (!window.lastCoords){ alert('Activa la ubicación y espera a que se fije.'); return; }
+    photoInput.click();
+  });
+
+  // Al elegir/tomar foto: calcular PR y estampar
+  photoInput?.addEventListener('change', async (e)=>{
+    const f = e.target.files?.[0]; if(!f) return;
+    if (!window.routeReady){ alert('Debes cargar primero el KML.'); return; }
+    if (!window.computePRfromLatLon || !window.lastCoords){
+      alert('Aún no hay coordenadas del GPS. Activa la ubicación y espera un momento.');
+      return;
+    }
+    try{
+      const res = window.computePRfromLatLon(window.lastCoords.latitude, window.lastCoords.longitude);
+      if (!res){ alert('No fue posible calcular el PR.'); return; }
+      const stamped = await composeImageWithPR(f, res.prTxt);
+      const base = (f.name?.replace(/\.[^.]+$/,'') || 'foto');
+      const name = `${base}_${res.prTxt}.jpg`;
+      downloadBlob(stamped, name);
+      statusEl.textContent = `Imagen generada con ${res.prTxt}`;
+    }catch(err){
+      console.error(err);
+      alert('Error estampando PR en la imagen: ' + err.message);
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
