@@ -33,7 +33,26 @@
     .hidden { display:none !important }
   </style>
 </head>
+
 <body>
+<!-- === KML (Obligatorio antes de todo) === -->
+<style>
+  #kml-top{position:sticky; top:0; z-index:9998; background:#0b1220; padding:12px; border-bottom:1px solid #334155;
+    font-family:system-ui,Segoe UI,Roboto,Arial; color:#e2e8f0}
+  #kml-top .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  #btnKML{padding:10px 14px;border-radius:10px;border:1px solid #334155;background:#111827;color:#e5e7eb;cursor:pointer}
+  #kmlFile{display:none}
+  #kmlStatus{font-size:12px; opacity:.85}
+</style>
+<div id="kml-top">
+  <div><strong>Cargar KML de ruta (obligatorio)</strong></div>
+  <div class="row">
+    <button id="btnKML" type="button">Seleccionar archivo KML…</button>
+    <input id="kmlFile" type="file" accept=".kml" />
+    <span id="kmlStatus">Sin ruta cargada.</span>
+  </div>
+</div>
+
   <header>
     <h2>Registro PR</h2>
     <div class="hint">GPS en vivo + cámara (overlay) con fallback iOS y botón Compartir</div>
@@ -303,235 +322,39 @@
     }
   </script>
 
-<!-- === Imagen con PR: UI === -->
-<style>
-#img-box{max-width:720px;margin:16px auto;padding:12px;border:1px solid #334155;border-radius:12px;
-  background:#0b1220;color:#cbd5e1;font-family:system-ui,Segoe UI,Roboto,Arial;}
-.preview{max-width:100%;display:block;margin:10px 0;border-radius:10px;border:1px solid #334155}
-</style>
-
-<div id="img-box">
-  <div class="row">
-    <div class="label"><strong>Insertar PR en imagen</strong></div>
-    <input id="photoInput" type="file" accept="image/*" capture="environment" />
-  </div>
-  <img id="previewImg" class="preview" alt="Vista previa" style="display:none"/>
-  <div class="row">
-    <button id="btnSavePR" class="btn" type="button" disabled>Guardar JPG con PR</button>
-    <a id="downloadLink" style="margin-left:10px"></a>
-  </div>
-</div>
-
-
 <script>
 (function(){
-  const input   = document.getElementById('photoInput');
-  const btnSave = document.getElementById('btnSavePR');
-  const preview = document.getElementById('previewImg');
-  const dl      = document.getElementById('downloadLink');
-  const prField = document.getElementById('prField');
+  const btn = document.getElementById('btnKML');
+  const inp = document.getElementById('kmlFile');
+  const status = document.getElementById('kmlStatus');
+  const kmlInputExisting = document.getElementById('kmlInput');
 
-  let imgBitmap = null;
-  let imgName   = 'foto';
+  btn?.addEventListener('click', ()=> inp?.click());
 
-  function readAsDataURL(file){
-    return new Promise((resolve,reject)=>{
-      const fr = new FileReader();
-      fr.onload = ()=>resolve(fr.result);
-      fr.onerror = reject;
-      fr.readAsDataURL(file);
-    });
-  }
-
-  input?.addEventListener('change', async (e)=>{
-    const f = e.target.files?.[0];
-    if (!f) return;
-    imgName = f.name.replace(/\.[^.]+$/, '') || 'foto';
-    const url = await readAsDataURL(f);
-    preview.src = url;
-    preview.style.display = 'block';
-    imgBitmap = await createImageBitmap(f);
-    btnSave.disabled = false;
-    dl.textContent = '';
-    dl.removeAttribute('href');
-  });
-
-  function drawPRtoCanvas(bitmap, prText){
-    // Canvas con misma orientación que la foto
-    const w = bitmap.width, h = bitmap.height;
-    const bandH = Math.round(Math.max(48, h * 0.06)); // 6% min 48px
-    const pad   = Math.round(bandH * 0.25);
-    const fontSize = Math.round(bandH * 0.5);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h + bandH; // banda inferior
-    const ctx = canvas.getContext('2d');
-
-    // Imagen
-    ctx.drawImage(bitmap, 0, 0, w, h);
-
-    // Banda
-    ctx.fillStyle = '#0b1220';
-    ctx.fillRect(0, h, w, bandH);
-
-    // Texto PR y fecha/hora
-    const now = new Date();
-    const ymd = now.toISOString().slice(0,10);
-    const hms = now.toTimeString().slice(0,8);
-    const extra = `${ymd} ${hms}`;
-
-    ctx.font = `bold ${fontSize}px system-ui, Segoe UI, Roboto, Arial`;
-    ctx.fillStyle = '#d1e9ff';
-    ctx.textBaseline = 'middle';
-
-    // PR a la izquierda
-    const prLabel = `PR: ${prText || '—'}`;
-    ctx.fillText(prLabel, pad, h + bandH/2);
-
-    // Extra a la derecha (fecha/hora)
-    const extraW = ctx.measureText(extra).width;
-    ctx.fillText(extra, w - pad - extraW, h + bandH/2);
-
-    return canvas;
-  }
-
-  btnSave?.addEventListener('click', async ()=>{
-    if (!imgBitmap){ alert('Primero selecciona una imagen.'); return; }
-    const prText = (prField?.value || '').trim();
-    const canvas = drawPRtoCanvas(imgBitmap, prText);
-    // Exportar a JPG
-    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.92));
-    const newName = `${imgName}_conPR.jpg`;
-    const url = URL.createObjectURL(blob);
-    dl.href = url;
-    dl.download = newName;
-    dl.textContent = 'Descargar imagen';
-  });
-})();
-</script>
-
-
-<!-- === MÓDULO KML PR === -->
-
-<script>
-(() => {
-  const $kmlInput = document.getElementById('kmlInput');
-  const $kmlInfo  = document.getElementById('kmlInfo');
-  let ROUTE=[], ACC=[], READY=false;
-  const _cb=[];
-  window.KML_PR={_offset_m:0,setOffset(km=0,m=0){this._offset_m=km*1000+m},
-  async loadKML(f){const t=await f.text();const pts=pKML(t);ACC=bCD(pts);ROUTE=pts;READY=true;
-  const tot=(ACC[ACC.length-1]/1000).toFixed(3);if($kmlInfo)$kmlInfo.textContent=`Ruta cargada: ${pts.length} pts, ${tot} km.`;return{len:pts.length}},
-  computeFrom(lat,lon){if(!READY)return null;const r=nProg(lat,lon,ROUTE,ACC);const d=r.d+this._offset_m;
-  const km=Math.floor(d/1000),m=Math.round(d-km*1000),prTxt=`PR_${String(km).padStart(3,'0')}+${String(m).padStart(3,'0')}`;
-  const out={...r,d,km,m,prTxt};document.dispatchEvent(new CustomEvent('kml-pr:update',{detail:out}));_cb.forEach(fn=>{try{fn(out)}catch{}});return out},
-  onUpdate(cb){if(typeof cb==='function')_cb.push(cb);return()=>{const i=_cb.indexOf(cb);if(i>=0)_cb.splice(i,1)}}};
-  $kmlInput?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;
-  try{await window.KML_PR.loadKML(f);}catch(err){READY=false;if($kmlInfo)$kmlInfo.textContent='Error leyendo KML: '+err.message;}});
-  function H(lat1,lon1,lat2,lon2){const R=6371008.8,tr=Math.PI/180,dLat=(lat2-lat1)*tr,dLon=(lon2-lon1)*tr;
-    const a=Math.sin(dLat/2)**2+Math.cos(lat1*tr)*Math.cos(lat2*tr)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
-  function tXY(lat,lon,lat0){const R=6371008.8,tr=Math.PI/180;return{x:R*(lon*tr)*Math.cos(lat0*tr),y:R*(lat*tr)}}
-  function pSeg(lat,lon,A,B){const lat0=0.5*(A.lat+B.lat),P=tXY(lat,lon,lat0),a=tXY(A.lat,A.lon,lat0),b=tXY(B.lat,B.lon,lat0);
-    const vx=b.x-a.x,vy=b.y-a.y,wx=P.x-a.x,wy=P.y-a.y,L2=vx*vx+vy*vy||1e-9;let t=(vx*wx+vy*wy)/L2;t=Math.max(0,Math.min(1,t));
-    const px=a.x+t*vx,py=a.y+t*vy,d=Math.hypot(P.x-px,P.y-py);return{dist:d,t};}
-  function bCD(p){const a=[0];for(let i=1;i<p.length;i++)a[i]=a[i-1]+H(p[i-1].lat,p[i-1].lon,p[i].lat,p[i].lon);return a;}
-  function nProg(lat,lon,p,a){let best={dist:1e9,i:0,t:0};for(let i=0;i<p.length-1;i++){const r=pSeg(lat,lon,p[i],p[i+1]);if(r.dist<best.dist)best={dist:r.dist,i,t:r.t};}
-    const seg=H(p[best.i].lat,p[best.i].lon,p[best.i+1].lat,p[best.i+1].lon);const d=a[best.i]+best.t*seg;const km=Math.floor(d/1000),m=Math.round(d-km*1000);
-    const prTxt=`PR_${String(km).padStart(3,'0')}+${String(m).padStart(3,'0')}`;return{d,km,m,prTxt,i:best.i,t:best.t,dist_to_route_m:best.dist};}
-  function pKML(t){const xml=new DOMParser().parseFromString(t,'application/xml'),n=Array.from(xml.getElementsByTagName('coordinates')),pts=[];
-    for(const nd of n){const raw=(nd.textContent||'').trim().split(/\s+/);for(const s of raw){const [lonS,latS]=s.split(',');
-      const lon=parseFloat(lonS),lat=parseFloat(latS);if(isFinite(lat)&&isFinite(lon)){const last=pts[pts.length-1];if(!last||last.lat!==lat||last.lon!==lon)pts.push({lat,lon});}}}
-    if(pts.length<2)throw new Error('No se encontró LineString válida en el KML.');return pts;}
-})();
-</script>
-
-
-<!-- === Captura / Estampado de PR en imagen === -->
-<style>
-  #capture-box{max-width:720px;margin:16px auto;padding:12px;border:1px solid #334155;border-radius:12px;
-    background:#0b1220;color:#cbd5e1;font-family:system-ui,Segoe UI,Roboto,Arial;}
-  #capture-box .hint{font-size:12px;opacity:.85;margin-top:6px}
-  #selectPhotoBtn[disabled], #shootBtn[disabled]{opacity:.5;cursor:not-allowed}
-</style>
-
-<div id="capture-box">
-  <strong>Foto con PR impreso</strong>
-  <div class="hint">Primero carga el KML. Luego permite GPS para calcular el PR y estamparlo dentro de la imagen.</div>
-  <div style="margin-top:8px">
-    <input id="photoInput" type="file" accept="image/*" capture="environment" style="display:none" />
-    <button id="selectPhotoBtn" class="btn" type="button" disabled>Tomar / seleccionar foto (imprime PR)</button>
-  </div>
-  <div id="captureStatus" class="hint"></div>
-</div>
-
-<script>
-(function(){
-  const selectBtn = document.getElementById('selectPhotoBtn');
-  const photoInput= document.getElementById('photoInput');
-  const statusEl  = document.getElementById('captureStatus');
-
-  // util para descargar
-  function downloadBlob(blob, filename){
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click();
-    a.remove(); URL.revokeObjectURL(url);
-  }
-
-  async function composeImageWithPR(file, prTxt){
-    return new Promise((resolve,reject)=>{
-      const img = new Image();
-      img.onload = ()=>{
-        const w = img.naturalWidth || img.width;
-        const h = img.naturalHeight || img.height;
-        const c = document.createElement('canvas'); c.width=w; c.height=h;
-        const ctx = c.getContext('2d');
-        ctx.drawImage(img,0,0,w,h);
-        const barH = Math.round(h*0.10);
-        ctx.fillStyle = 'rgba(5,10,20,0.7)';
-        ctx.fillRect(0,h-barH,w,barH);
-        ctx.fillStyle = '#7dd3fc';
-        ctx.font = `bold ${Math.max(18, Math.round(barH*0.5))}px system-ui,Segoe UI,Roboto,Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`PR: ${prTxt}`, w/2, h - barH/2);
-        c.toBlob((b)=> b? resolve(b):reject(new Error('No se pudo generar imagen')), 'image/jpeg', 0.95);
-      };
-      img.onerror = (e)=>reject(new Error('Error cargando la imagen'));
-      img.src = URL.createObjectURL(file);
-    });
-  }
-
-  // Click en botón → abrir file input
-  selectBtn?.addEventListener('click', ()=>{
-    if (!window.routeReady){ alert('Debes cargar primero el KML.'); return; }
-    if (!window.lastCoords){ alert('Activa la ubicación y espera a que se fije.'); return; }
-    photoInput.click();
-  });
-
-  // Al elegir/tomar foto: calcular PR y estampar
-  photoInput?.addEventListener('change', async (e)=>{
-    const f = e.target.files?.[0]; if(!f) return;
-    if (!window.routeReady){ alert('Debes cargar primero el KML.'); return; }
-    if (!window.computePRfromLatLon || !window.lastCoords){
-      alert('Aún no hay coordenadas del GPS. Activa la ubicación y espera un momento.');
-      return;
-    }
+  async function handleKMLFile(file){
+    if (!file) return;
     try{
-      const res = window.computePRfromLatLon(window.lastCoords.latitude, window.lastCoords.longitude);
-      if (!res){ alert('No fue posible calcular el PR.'); return; }
-      const stamped = await composeImageWithPR(f, res.prTxt);
-      const base = (f.name?.replace(/\.[^.]+$/,'') || 'foto');
-      const name = `${base}_${res.prTxt}.jpg`;
-      downloadBlob(stamped, name);
-      statusEl.textContent = `Imagen generada con ${res.prTxt}`;
+      const txt = await file.text();
+      if (typeof window.parseKML === 'function' && typeof window.buildCumDist === 'function'){
+        window.routePts = window.parseKML(txt);
+        window.cumDist = window.buildCumDist(window.routePts);
+        window.routeReady = true;
+        const totalKm = (window.cumDist[window.cumDist.length-1]/1000).toFixed(3);
+        status.textContent = `Ruta cargada (${file.name}): ${window.routePts.length} pts, ≈ ${totalKm} km.`;
+        const kmlInfo = document.getElementById('kmlInfo');
+        if (kmlInfo) kmlInfo.textContent = status.textContent;
+      }else{
+        status.textContent = 'No se encontraron funciones de KML; intenta recargar.';
+      }
     }catch(err){
       console.error(err);
-      alert('Error estampando PR en la imagen: ' + err.message);
+      status.textContent = 'Error leyendo KML: ' + err.message;
+      window.routeReady = false;
     }
-  });
+  }
+
+  inp?.addEventListener('change', (e)=> handleKMLFile(e.target.files?.[0]));
+  kmlInputExisting?.addEventListener('change', (e)=> handleKMLFile(e.target.files?.[0]));
 })();
 </script>
 
