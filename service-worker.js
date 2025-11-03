@@ -1,5 +1,5 @@
-// SW básico (v5) para forzar actualización en iOS
-const CACHE_NAME = "pr-live-cache-v5";
+// SW básico (v6) para forzar actualización
+const CACHE_NAME = "pr-live-cache-v6";
 const ASSETS = ["./","./index.html","./manifest.json","./icon-192.png","./icon-512.png"];
 
 self.addEventListener("install", e => {

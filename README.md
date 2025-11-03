@@ -1,12 +1,10 @@
-# Registro PR Live (PWA) — iOS friendly
-**Qué hace:**  
-- GPS en vivo: intenta `watchPosition` al cargar. Si Safari requiere gesto, aparece **Activar GPS** (usa `getCurrentPosition` para mostrar el prompt) y luego engancha `watchPosition`.
-- Cámara: intenta `getUserMedia` (video + overlay). Si estás en **iOS PWA (standalone)** o el navegador no lo permite, activa **fallback** con `<input type=file capture="environment">`.
-- Descarga JPG con nombre PR.
+# Registro PR Live (PWA) — overlay también en fallback + botón Compartir
 
-**Por qué así:** iOS a veces bloquea `getUserMedia` dentro de PWA instaladas. Safari en pestaña normal suele permitirlo. Este build detecta iOS+standalone y fuerza el modo alterno.
+**Incluye:**
+- GPS en vivo (`watchPosition`) al cargar, y botón “Activar GPS” si Safari necesita gesto.
+- Cámara en vivo + overlay cuando `getUserMedia` está disponible (Safari).
+- **Fallback iOS/PWA**: `<input type=file capture="environment">` + canvas para **imprimir overlay** en el JPG final.
+- Botón **Compartir** (Web Share API con archivos): en iOS permite **Guardar imagen** al Álbum de Fotos.
+- Service Worker cache **v6** para que el dispositivo tome el build nuevo.
 
-**Publicar en GitHub Pages:**  
-Settings → Pages → Deploy from a branch → main /(root).
-
-**Importante:** Este build usa *cache v5* para que el navegador descargue archivos nuevos.
+**Publicación:** GitHub Pages → Settings → Pages → Deploy from a branch → main /(root). Abre con `?v=6` para forzar update.
