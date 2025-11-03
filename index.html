@@ -9,6 +9,11 @@
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#0f172a" />
 
+  <!-- iOS PWA meta -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
   <style>
     body {
       background: #0f172a;
@@ -18,12 +23,7 @@
       max-width: 480px;
       margin: 0 auto;
     }
-
-    header {
-      text-align: center;
-      margin-bottom: 1rem;
-    }
-
+    header { text-align: center; margin-bottom: 1rem; }
     .card {
       background: #1e2537;
       border: 1px solid #334155;
@@ -31,7 +31,6 @@
       padding: 16px;
       margin-bottom: 1rem;
     }
-
     button {
       width: 100%;
       background: #38bdf8;
@@ -42,20 +41,8 @@
       border: 0;
       font-size: 1rem;
     }
-
-    button:active {
-      scale: .98;
-    }
-
-    .row {
-      display: flex;
-      flex-direction: column;
-      gap: .5rem;
-      font-size: .9rem;
-      line-height: 1.3rem;
-      word-break: break-word;
-    }
-
+    button:active { transform: scale(.98); }
+    .row { display: flex; flex-direction: column; gap: .5rem; font-size: .9rem; line-height: 1.3rem; word-break: break-word; }
     img#preview {
       width: 100%;
       max-height: 240px;
@@ -64,53 +51,44 @@
       border-radius: 8px;
       border: 1px solid #334155;
     }
-
-    .label {
-      color: #94a3b8;
-      font-size: .75rem;
-      text-transform: uppercase;
-      letter-spacing: .05em;
+    .label { color: #94a3b8; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; }
+    .value { color: #f8fafc; font-size: .9rem; font-family: ui-monospace, SFMono-Regular, monospace; }
+    .small-note { font-size: .7rem; color: #64748b; }
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px; height: 1px;
+      margin: -1px; padding: 0; border: 0;
+      overflow: hidden; clip: rect(0 0 0 0);
+      opacity: 0;
     }
-
-    .value {
-      color: #f8fafc;
-      font-size: .9rem;
-      font-family: ui-monospace, SFMono-Regular, monospace;
-    }
-
-    .small-note {
-      font-size: .7rem;
-      color: #64748b;
-    }
-
-    .hidden {
-      display: none;
-    }
-
     input.value {
-      background:#0f172a;
-      border:1px solid #334155;
-      border-radius:8px;
-      padding:8px;
-      color:#f8fafc;
+      background:#0f172a; border:1px solid #334155; border-radius:8px; padding:8px; color:#f8fafc;
     }
   </style>
 </head>
 <body>
   <header>
     <h2>Registro PR</h2>
-    <div class="small-note">Beta PWA offline</div>
+    <div class="small-note">PWA con compatibilidad iOS</div>
   </header>
+
+  <!-- Seguridad -->
+  <section class="card">
+    <div class="row">
+      <div class="label">Estado de seguridad</div>
+      <div id="secure" class="value"></div>
+      <button id="btnPermisos">Comprobar permisos</button>
+      <div class="small-note">Usa Safari y agrega a pantalla de inicio. Asegúrate de permitir Cámara y Ubicación.</div>
+    </div>
+  </section>
 
   <!-- GPS -->
   <section class="card">
     <div class="row">
       <div class="label">Ubicación actual</div>
       <div class="value" id="coords">lat: ---, lon: ---</div>
-      <button id="btnGPS">Obtener GPS</button>
-      <div class="small-note">
-        Activa ubicación de alta precisión en el teléfono antes de capturar.
-      </div>
+      <button id="btnGPS">Obtener GPS (iOS-friendly)</button>
+      <div class="small-note">Activa ubicación de alta precisión. Este botón dispara la solicitud de permiso.</div>
     </div>
   </section>
 
@@ -118,22 +96,14 @@
   <section class="card">
     <div class="row">
       <div class="label">Foto</div>
-
-      <img id="preview" class="hidden" alt="preview" />
-
-      <input
-        id="inputCam"
-        type="file"
-        accept="image/*"
-        capture="environment"
-        class="hidden"
-      />
-
-      <button id="btnFoto">Tomar foto</button>
-
-      <div class="small-note">
-        Usa la cámara trasera. La imagen NO se sube a ningún servidor todavía.
-      </div>
+      <img id="preview" class="visually-hidden" alt="preview" />
+      <!-- Nota: En iOS no disparamos click() programático sobre un input oculto display:none.
+                 En su lugar usamos label[for] con input visible para el sistema pero oculto visualmente. -->
+      <input id="inputCam" type="file" accept="image/*;capture=camera" class="visually-hidden" />
+      <label for="inputCam">
+        <button type="button">Tomar foto</button>
+      </label>
+      <div class="small-note">Si no abre la cámara, revisa: Ajustes → Safari → Cámara → Permitir.</div>
     </div>
   </section>
 
@@ -141,163 +111,109 @@
   <section class="card">
     <div class="row">
       <div class="label">PR calculado</div>
-      <input
-        id="prField"
-        class="value"
-        placeholder="PR_000+000"
-      />
-
+      <input id="prField" class="value" placeholder="PR_000+000" />
       <button id="btnDescargar" disabled>Guardar en el teléfono</button>
-
-      <div class="small-note">
-        Genera un archivo .jpg con este nombre y lo descarga en tu celular.
-      </div>
+      <div class="small-note">Descarga un .jpg con ese nombre. En iOS lo verás en Archivos.</div>
     </div>
   </section>
 
-  <!-- Historial local (cola offline futura) -->
-  <section class="card">
-    <div class="row">
-      <div class="label">Historial local (demo)</div>
-      <div class="small-note">
-        Aquí luego guardaremos (offline) lat/lon/PR/foto para subirlos más tarde al servidor.
-      </div>
-      <pre id="historial" class="value" style="white-space:pre-wrap; font-size:.8rem; line-height:1.2rem;">[ Vacío ]</pre>
-    </div>
-  </section>
-
-  <!-- Logs -->
+  <!-- Log -->
   <section class="card">
     <div class="row">
       <div class="label">Log</div>
-      <div id="log" class="value" style="white-space:pre-line; font-size:.8rem; line-height:1.2rem;">
-        Listo.
-      </div>
+      <div id="log" class="value" style="white-space:pre-line; font-size:.8rem; line-height:1.2rem;">Listo.</div>
     </div>
   </section>
 
   <script>
-    // Elementos DOM
-    const btnGPS        = document.getElementById("btnGPS");
-    const coordsEl      = document.getElementById("coords");
-    const btnFoto       = document.getElementById("btnFoto");
-    const inputCam      = document.getElementById("inputCam");
-    const previewImg    = document.getElementById("preview");
-    const prField       = document.getElementById("prField");
-    const btnDescargar  = document.getElementById("btnDescargar");
-    const logEl         = document.getElementById("log");
-    const historialEl   = document.getElementById("historial");
+    const secureEl = document.getElementById("secure");
+    const btnPermisos = document.getElementById("btnPermisos");
+    const btnGPS = document.getElementById("btnGPS");
+    const coordsEl = document.getElementById("coords");
+    const inputCam = document.getElementById("inputCam");
+    const previewImg = document.getElementById("preview");
+    const prField = document.getElementById("prField");
+    const btnDescargar = document.getElementById("btnDescargar");
+    const logEl = document.getElementById("log");
 
     let lastPhotoBlob = null;
-    let lastCaptureData = []; // en memoria. Paso siguiente sería guardarlo en IndexedDB.
 
-    function log(msg) {
-      console.log(msg);
-      logEl.textContent = msg;
-    }
+    function log(msg) { console.log(msg); logEl.textContent = msg; }
 
-    // 1. Obtener GPS
+    // Mostrar si es contexto seguro (requerido por cámara/GPS)
+    const isSecure = window.isSecureContext;
+    secureEl.textContent = isSecure ? "Contexto seguro ✅ (HTTPS)" : "No seguro ❌ (usa HTTPS / GitHub Pages)";
+
+    // Comprobar permisos de forma amistosa (no todos los navegadores soportan Permissions API)
+    btnPermisos.addEventListener("click", async () => {
+      let notes = [];
+      if (!navigator.geolocation) {
+        notes.push("Geolocalización no disponible en este navegador.");
+      } else {
+        notes.push("Geolocalización disponible.");
+      }
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        notes.push("getUserMedia soportado (video/cámara).");
+      } else {
+        notes.push("getUserMedia no soportado; usaremos input type=file (compatible iOS).");
+      }
+      log(notes.join("\n"));
+    });
+
+    // GPS con gesto del usuario
     btnGPS.addEventListener("click", () => {
-      if (!("geolocation" in navigator)) {
+      if (!navigator.geolocation) {
         log("Geolocalización no soportada.");
         return;
       }
-
-      log("Obteniendo coordenadas...");
-
+      log("Solicitando ubicación...");
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const lat = pos.coords.latitude.toFixed(6);
           const lon = pos.coords.longitude.toFixed(6);
-          coordsEl.textContent = "lat: " + lat + ", lon: " + lon;
-
-          // TODO: aquí metes tu cálculo real de PR según lat/lon contra tu eje vial
-          const prEstimado = "PR_" +
-            Math.floor(Math.random()*200) +
-            "+" +
-            String(Math.floor(Math.random()*1000)).padStart(3,"0");
-
+          coordsEl.textContent = `lat: ${lat}, lon: ${lon}`;
+          // TODO: sustituir por cálculo real de PR
+          const prEstimado = `PR_${Math.floor(Math.random()*200)}+${String(Math.floor(Math.random()*1000)).padStart(3,"0")}`;
           prField.value = prEstimado;
-
-          log("Coordenadas OK y PR estimado generado.");
+          log("Ubicación OK. PR estimado listo.");
         },
         (err) => {
-          log("Error GPS: " + err.message);
+          log("Error GPS: " + err.message + "\nRevisa Ajustes → Privacidad → Localización y permisos de Safari.");
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     });
 
-    // 2. Tomar foto
-    btnFoto.addEventListener("click", () => {
-      inputCam.click();
-    });
-
-    inputCam.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) {
-        log("No se seleccionó foto.");
-        return;
-      }
-
+    // Manejo de foto (label dispara inputCam directamente)
+    inputCam.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) { log("No se seleccionó foto."); return; }
       lastPhotoBlob = file;
-
       const url = URL.createObjectURL(file);
       previewImg.src = url;
-      previewImg.classList.remove("hidden");
-
+      previewImg.classList.remove("visually-hidden");
       btnDescargar.disabled = false;
-      log("Foto lista (" + (file.size/1024).toFixed(1) + " KB).");
+      log(`Foto lista (${(file.size/1024).toFixed(1)} KB).`);
     });
 
-    // 3. Descargar con nombre PR
+    // Descargar con nombre del PR
     btnDescargar.addEventListener("click", () => {
-      if (!lastPhotoBlob) {
-        log("No hay foto para descargar.");
-        return;
-      }
-
-      let nombrePR = prField.value.trim();
-      if (!nombrePR) {
-        nombrePR = "PR_sin_nombre";
-      }
-      if (!nombrePR.toLowerCase().endsWith(".jpg")) {
-        nombrePR += ".jpg";
-      }
-
+      if (!lastPhotoBlob) { log("No hay foto para descargar."); return; }
+      let nombrePR = (prField.value || "PR_sin_nombre").trim();
+      if (!nombrePR.toLowerCase().endsWith(".jpg")) nombrePR += ".jpg";
       const a = document.createElement("a");
       a.href = URL.createObjectURL(lastPhotoBlob);
       a.download = nombrePR;
       a.click();
       URL.revokeObjectURL(a.href);
-
-      log("Descargando "" + nombrePR + "". Revisa Descargas / Archivos.");
-
-      // Guardar registro en la "cola" local de capturas (demo)
-      const nowIso = new Date().toISOString();
-      const coordsText = coordsEl.textContent;
-      lastCaptureData.push({
-        timestamp: nowIso,
-        coords: coordsText,
-        pr: prField.value,
-        filename: nombrePR,
-        sizeKB: (lastPhotoBlob.size/1024).toFixed(1)
-      });
-
-      historialEl.textContent = JSON.stringify(lastCaptureData, null, 2);
+      log(`Descargando "${nombrePR}".`);
     });
 
-    // Registrar service worker para PWA offline
+    // Registrar SW
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./service-worker.js").then(() => {
-        console.log("Service Worker registrado");
-      }).catch(err => {
-        console.warn("SW fallo:", err);
-      });
+      navigator.serviceWorker.register("./service-worker.js")
+        .then(() => console.log("Service Worker registrado"))
+        .catch(err => console.warn("SW fallo:", err));
     }
   </script>
 </body>
