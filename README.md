@@ -1,11 +1,13 @@
-# Registro PR PWA (iOS-friendly)
+# Registro PR Live (PWA)
+- GPS en vivo automático con `watchPosition` al cargar.
+- Botón "Abrir cámara" usa `getUserMedia` (video en vivo) y superpone coordenadas en la vista y en la captura.
+- Fallback iOS: si la cámara en vivo está bloqueada en PWA, aparece un `<input type="file" capture="environment">`.
+- Descarga el JPG con el nombre del PR.
 
-Ajustes clave para iPhone/iOS:
-- No usamos `input[type=file]` con `display:none` + `click()` programático (iOS lo bloquea a veces).
-- En su lugar, usamos `<label for="inputCam">` que dispara el input de forma nativa.
-- Metas PWA para iOS: `apple-mobile-web-app-capable`, `apple-touch-icon`.
-- Botón "Obtener GPS" que dispara el permiso con un gesto del usuario.
-- Revisa permisos: Ajustes → Safari → Cámara/Localización → Permitir.
+## GitHub Pages
+Settings → Pages → Deploy from a branch → main /(root). HTTPS automático.
 
-## Publicación en GitHub Pages
-Mismo procedimiento que la versión anterior (Settings → Pages → Deploy from a branch → main → /(root)).
+## Notas iOS
+Algunas versiones de iOS limitan `getUserMedia` en PWA. En ese caso:
+- Usa Safari normal para tener cámara en vivo con overlay, o
+- Usa el fallback de input para tomar fotos (sin overlay en la UI nativa).

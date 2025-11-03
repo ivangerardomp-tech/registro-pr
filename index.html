@@ -3,117 +3,158 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Registro PR</title>
+  <title>Registro PR (Live GPS + Cámara)</title>
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#0f172a" />
-
   <!-- iOS PWA meta -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <link rel="apple-touch-icon" href="icon-192.png">
 
   <style>
+    :root { --bg:#0f172a; --card:#1e2537; --b:#334155; --text:#f8fafc; --muted:#94a3b8; --brand:#38bdf8; }
+    * { box-sizing:border-box }
     body {
-      background: #0f172a;
-      color: #f8fafc;
-      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       padding: 16px;
-      max-width: 480px;
+      max-width: 560px;
       margin: 0 auto;
     }
-    header { text-align: center; margin-bottom: 1rem; }
+    header { text-align:center; margin-bottom: 12px; }
     .card {
-      background: #1e2537;
-      border: 1px solid #334155;
+      background: var(--card);
+      border: 1px solid var(--b);
       border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 1rem;
+      padding: 14px;
+      margin-bottom: 12px;
     }
-    button {
+    .row { display:flex; flex-direction:column; gap:8px }
+    .label { color: var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em }
+    .value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
+    button, .btn {
       width: 100%;
-      background: #38bdf8;
-      color: #0f172a;
-      font-weight: 600;
+      background: var(--brand);
+      color: #0b1324;
+      font-weight: 700;
       padding: 14px 16px;
       border-radius: 10px;
       border: 0;
       font-size: 1rem;
     }
-    button:active { transform: scale(.98); }
-    .row { display: flex; flex-direction: column; gap: .5rem; font-size: .9rem; line-height: 1.3rem; word-break: break-word; }
-    img#preview {
+    button:active { transform: scale(.98) }
+    #coords { white-space: pre-line }
+    #videoWrap {
+      position: relative;
       width: 100%;
-      max-height: 240px;
-      object-fit: contain;
-      background: #000;
-      border-radius: 8px;
-      border: 1px solid #334155;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--b);
+      background:#000;
+      display:none;
     }
-    .label { color: #94a3b8; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; }
-    .value { color: #f8fafc; font-size: .9rem; font-family: ui-monospace, SFMono-Regular, monospace; }
-    .small-note { font-size: .7rem; color: #64748b; }
-    .visually-hidden {
-      position: absolute !important;
-      width: 1px; height: 1px;
-      margin: -1px; padding: 0; border: 0;
-      overflow: hidden; clip: rect(0 0 0 0);
-      opacity: 0;
+    video {
+      width: 100%;
+      height: auto;
+    }
+    #overlay {
+      position:absolute;
+      left:0; right:0; bottom:0;
+      background: rgba(0,0,0,.5);
+      color:#fff;
+      padding:8px 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size:.85rem;
+      line-height:1.2rem;
+    }
+    #topBadge {
+      position:absolute; top:8px; left:8px;
+      background: rgba(15,23,42,.7);
+      color: #fff; padding:6px 10px;
+      border-radius: 999px;
+      font-size:.75rem;
+      border:1px solid rgba(255,255,255,.15);
+    }
+    #previewImg {
+      width:100%; max-height: 240px; object-fit:contain; display:none; border:1px solid var(--b); border-radius: 8px;
     }
     input.value {
-      background:#0f172a; border:1px solid #334155; border-radius:8px; padding:8px; color:#f8fafc;
+      width:100%;
+      background: var(--bg);
+      color: var(--text);
+      border:1px solid var(--b);
+      border-radius:8px;
+      padding:10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }
+    .hint { color:#64748b; font-size:.8rem }
+    .warn { color:#fbbf24; font-size:.85rem }
+    .err  { color:#f87171; font-size:.9rem }
+    .row-h { display:flex; gap:8px }
   </style>
 </head>
 <body>
   <header>
     <h2>Registro PR</h2>
-    <div class="small-note">PWA con compatibilidad iOS</div>
+    <div class="hint">GPS en vivo + cámara con overlay</div>
   </header>
 
-  <!-- Seguridad -->
+  <!-- Estado -->
   <section class="card">
     <div class="row">
-      <div class="label">Estado de seguridad</div>
-      <div id="secure" class="value"></div>
-      <button id="btnPermisos">Comprobar permisos</button>
-      <div class="small-note">Usa Safari y agrega a pantalla de inicio. Asegúrate de permitir Cámara y Ubicación.</div>
+      <div class="label">Estado</div>
+      <div id="state" class="value">Cargando…</div>
+      <div class="hint">HTTPS requerido. En iPhone, prueba primero en Safari si el modo app (PWA) limita la cámara.</div>
     </div>
   </section>
 
-  <!-- GPS -->
+  <!-- Coordenadas (auto al abrir) -->
   <section class="card">
     <div class="row">
-      <div class="label">Ubicación actual</div>
-      <div class="value" id="coords">lat: ---, lon: ---</div>
-      <button id="btnGPS">Obtener GPS (iOS-friendly)</button>
-      <div class="small-note">Activa ubicación de alta precisión. Este botón dispara la solicitud de permiso.</div>
+      <div class="label">Coordenadas en vivo</div>
+      <div id="coords" class="value">lat: —, lon: —\nprecisión: — m\nvelocidad: — m/s</div>
+      <div class="hint">Se inician automáticamente con <code>watchPosition</code>. Mueve el equipo y verás la actualización.</div>
     </div>
   </section>
 
-  <!-- Foto -->
+  <!-- Cámara con overlay -->
   <section class="card">
     <div class="row">
-      <div class="label">Foto</div>
-      <img id="preview" class="visually-hidden" alt="preview" />
-      <!-- Nota: En iOS no disparamos click() programático sobre un input oculto display:none.
-                 En su lugar usamos label[for] con input visible para el sistema pero oculto visualmente. -->
-      <input id="inputCam" type="file" accept="image/*;capture=camera" class="visually-hidden" />
-      <label for="inputCam">
-        <button type="button">Tomar foto</button>
-      </label>
-      <div class="small-note">Si no abre la cámara, revisa: Ajustes → Safari → Cámara → Permitir.</div>
+      <div class="label">Cámara</div>
+      <div id="videoWrap">
+        <div id="topBadge">Cámara activa</div>
+        <video id="video" autoplay playsinline muted></video>
+        <div id="overlay">
+          lat: —, lon: — | precisión: — m | vel: — m/s
+        </div>
+      </div>
+      <div class="row-h">
+        <button id="btnOpenCam">Abrir cámara</button>
+        <button id="btnSnap" disabled>Capturar foto</button>
+      </div>
+      <img id="previewImg" alt="captura" />
+      <div class="hint">Si no abre, Safari → aA → Configuración del sitio → Cámara: Permitir.</div>
+      <div id="iosFileFallback" style="display:none">
+        <div class="warn">Modo alterno iOS: el navegador no permite cámara en vivo aquí. Usa este input para tomar foto:</div>
+        <input id="fileInput" type="file" accept="image/*" capture="environment"
+               style="display:block; width:100%; padding:12px; border:1px solid #334155; border-radius:8px; background:#0f172a; color:#f8fafc; margin-top:8px;" />
+      </div>
     </div>
   </section>
 
-  <!-- PR + descarga -->
+  <!-- PR + Guardado -->
   <section class="card">
     <div class="row">
-      <div class="label">PR calculado</div>
+      <div class="label">Nombre PR</div>
       <input id="prField" class="value" placeholder="PR_000+000" />
-      <button id="btnDescargar" disabled>Guardar en el teléfono</button>
-      <div class="small-note">Descarga un .jpg con ese nombre. En iOS lo verás en Archivos.</div>
+      <div class="row-h">
+        <button id="btnDownload" disabled>Descargar captura</button>
+        <button id="btnReset">Reiniciar</button>
+      </div>
+      <div class="hint">Guarda el JPG con este nombre. En iOS aparecerá en Archivos.</div>
     </div>
   </section>
 
@@ -121,99 +162,160 @@
   <section class="card">
     <div class="row">
       <div class="label">Log</div>
-      <div id="log" class="value" style="white-space:pre-line; font-size:.8rem; line-height:1.2rem;">Listo.</div>
+      <div id="log" class="value" style="white-space:pre-line">Listo.</div>
     </div>
   </section>
 
   <script>
-    const secureEl = document.getElementById("secure");
-    const btnPermisos = document.getElementById("btnPermisos");
-    const btnGPS = document.getElementById("btnGPS");
-    const coordsEl = document.getElementById("coords");
-    const inputCam = document.getElementById("inputCam");
-    const previewImg = document.getElementById("preview");
-    const prField = document.getElementById("prField");
-    const btnDescargar = document.getElementById("btnDescargar");
-    const logEl = document.getElementById("log");
+    const stateEl = document.getElementById('state');
+    const coordsEl = document.getElementById('coords');
+    const overlayEl = document.getElementById('overlay');
+    const videoWrap = document.getElementById('videoWrap');
+    const videoEl = document.getElementById('video');
+    const previewImg = document.getElementById('previewImg');
+    const btnOpenCam = document.getElementById('btnOpenCam');
+    const btnSnap = document.getElementById('btnSnap');
+    const btnDownload = document.getElementById('btnDownload');
+    const btnReset = document.getElementById('btnReset');
+    const prField = document.getElementById('prField');
+    const logEl = document.getElementById('log');
+    const iosFileFallback = document.getElementById('iosFileFallback');
+    const fileInput = document.getElementById('fileInput');
 
+    let watchId = null;
+    let lastCoords = null;
+    let mediaStream = null;
     let lastPhotoBlob = null;
 
-    function log(msg) { console.log(msg); logEl.textContent = msg; }
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
-    // Mostrar si es contexto seguro (requerido por cámara/GPS)
-    const isSecure = window.isSecureContext;
-    secureEl.textContent = isSecure ? "Contexto seguro ✅ (HTTPS)" : "No seguro ❌ (usa HTTPS / GitHub Pages)";
+    function log(msg){ console.log(msg); logEl.textContent = msg; }
 
-    // Comprobar permisos de forma amistosa (no todos los navegadores soportan Permissions API)
-    btnPermisos.addEventListener("click", async () => {
-      let notes = [];
+    // === 1) GPS en vivo automático al cargar ===
+    function startGPSWatch(){
       if (!navigator.geolocation) {
-        notes.push("Geolocalización no disponible en este navegador.");
-      } else {
-        notes.push("Geolocalización disponible.");
-      }
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        notes.push("getUserMedia soportado (video/cámara).");
-      } else {
-        notes.push("getUserMedia no soportado; usaremos input type=file (compatible iOS).");
-      }
-      log(notes.join("\n"));
-    });
-
-    // GPS con gesto del usuario
-    btnGPS.addEventListener("click", () => {
-      if (!navigator.geolocation) {
-        log("Geolocalización no soportada.");
+        stateEl.textContent = 'Geolocalización no soportada.';
         return;
       }
-      log("Solicitando ubicación...");
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude.toFixed(6);
-          const lon = pos.coords.longitude.toFixed(6);
-          coordsEl.textContent = `lat: ${lat}, lon: ${lon}`;
-          // TODO: sustituir por cálculo real de PR
-          const prEstimado = `PR_${Math.floor(Math.random()*200)}+${String(Math.floor(Math.random()*1000)).padStart(3,"0")}`;
-          prField.value = prEstimado;
-          log("Ubicación OK. PR estimado listo.");
-        },
-        (err) => {
-          log("Error GPS: " + err.message + "\nRevisa Ajustes → Privacidad → Localización y permisos de Safari.");
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
+      try {
+        watchId = navigator.geolocation.watchPosition((pos) => {
+          const { latitude, longitude, accuracy, speed } = pos.coords;
+          lastCoords = { latitude, longitude, accuracy, speed };
+          const lat = latitude?.toFixed(6);
+          const lon = longitude?.toFixed(6);
+          const acc = (accuracy ?? NaN).toFixed(1);
+          const vel = (speed ?? 0);
+          const velFmt = (isFinite(vel) ? vel.toFixed(2) : '—');
+
+          coordsEl.textContent = `lat: ${lat}, lon: ${lon}\nprecisión: ${acc} m\nvelocidad: ${velFmt} m/s`;
+          overlayEl.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m | vel: ${velFmt} m/s`;
+
+          if (!prField.value) {
+            prField.value = `PR_${Math.floor(Math.random()*200)}+${String(Math.floor(Math.random()*1000)).padStart(3,"0")}`;
+          }
+          stateEl.textContent = 'GPS activo (watchPosition).';
+        }, (err) => {
+          stateEl.textContent = 'Error GPS: ' + err.message + '. En iOS, puede requerir gesto del usuario la primera vez.';
+        }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+      } catch(e){
+        stateEl.textContent = 'Excepción al iniciar GPS: ' + e.message;
+      }
+    }
+
+    startGPSWatch();
+
+    // === 2) Cámara en vivo con overlay ===
+    async function openCamera(){
+      if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+        stateEl.innerHTML = 'getUserMedia no disponible. Usaremos <span class="value">input file</span> como alternativa.';
+        showIOSFallback();
+        return;
+      }
+      try {
+        const constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoEl.srcObject = mediaStream;
+        videoWrap.style.display = 'block';
+        btnSnap.disabled = false;
+        stateEl.textContent = 'Cámara en vivo activa.';
+      } catch (e) {
+        stateEl.textContent = 'No se pudo abrir la cámara: ' + e.message;
+        showIOSFallback();
+      }
+    }
+
+    function showIOSFallback(){
+      iosFileFallback.style.display = 'block';
+    }
+
+    btnOpenCam.addEventListener('click', openCamera);
+
+    // Capturar frame del video a imagen con overlay
+    btnSnap.addEventListener('click', () => {
+      if (!videoEl.videoWidth) { log('Video no listo'); return; }
+      const canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoEl, 0, 0);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
+      ctx.fillStyle = '#fff';
+      ctx.font = '20px ui-monospace';
+      const text = overlayEl.textContent;
+      ctx.fillText(text, 10, canvas.height - 18);
+      canvas.toBlob((blob) => {
+        lastPhotoBlob = blob;
+        const url = URL.createObjectURL(blob);
+        previewImg.src = url;
+        previewImg.style.display = 'block';
+        btnDownload.disabled = false;
+        log('Captura lista.');
+      }, 'image/jpeg', 0.92);
     });
 
-    // Manejo de foto (label dispara inputCam directamente)
-    inputCam.addEventListener("change", (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) { log("No se seleccionó foto."); return; }
-      lastPhotoBlob = file;
-      const url = URL.createObjectURL(file);
+    // Fallback: input file
+    fileInput?.addEventListener('change', (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      lastPhotoBlob = f;
+      const url = URL.createObjectURL(f);
       previewImg.src = url;
-      previewImg.classList.remove("visually-hidden");
-      btnDescargar.disabled = false;
-      log(`Foto lista (${(file.size/1024).toFixed(1)} KB).`);
+      previewImg.style.display = 'block';
+      btnDownload.disabled = false;
+      log('Foto seleccionada (fallback).');
     });
 
-    // Descargar con nombre del PR
-    btnDescargar.addEventListener("click", () => {
-      if (!lastPhotoBlob) { log("No hay foto para descargar."); return; }
-      let nombrePR = (prField.value || "PR_sin_nombre").trim();
-      if (!nombrePR.toLowerCase().endsWith(".jpg")) nombrePR += ".jpg";
-      const a = document.createElement("a");
+    // Descargar captura con nombre PR
+    btnDownload.addEventListener('click', () => {
+      if (!lastPhotoBlob) { log('No hay captura.'); return; }
+      let name = (prField.value || 'PR_sin_nombre').trim();
+      if (!name.toLowerCase().endsWith('.jpg')) name += '.jpg';
+      const a = document.createElement('a');
       a.href = URL.createObjectURL(lastPhotoBlob);
-      a.download = nombrePR;
+      a.download = name;
       a.click();
       URL.revokeObjectURL(a.href);
-      log(`Descargando "${nombrePR}".`);
+      log('Descargando ' + name);
     });
 
-    // Registrar SW
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./service-worker.js")
-        .then(() => console.log("Service Worker registrado"))
-        .catch(err => console.warn("SW fallo:", err));
+    btnReset.addEventListener('click', () => {
+      previewImg.style.display = 'none';
+      previewImg.src = '';
+      lastPhotoBlob = null;
+      btnDownload.disabled = true;
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+    }
+
+    if (isIOS && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone)) {
+      const warn = document.createElement('div');
+      warn.className = 'warn';
+      warn.textContent = 'iOS (modo app) puede limitar la cámara en vivo. Si no abre, usa Safari.';
+      document.querySelector('header')?.appendChild(warn);
     }
   </script>
 </body>
