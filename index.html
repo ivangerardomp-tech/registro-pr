@@ -1,20 +1,573 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Distancia PR - Ruta Densificada</title>
-    <link rel="manifest" href="manifest.json">
-    <script defer src="script.js"></script>
-    <script defer src="pr_map.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Registro PR (Live GPS + Cámara)</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    :root { --bg:#0f172a; --card:#1e2537; --b:#334155; --text:#f8fafc; --muted:#94a3b8; --brand:#38bdf8; }
+    * { box-sizing:border-box }
+    body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; padding:16px; max-width: 660px; margin:0 auto; }
+    header { text-align:center; margin-bottom: 12px; }
+    .card { background: var(--card); border:1px solid var(--b); border-radius:12px; padding:14px; margin-bottom:12px; }
+    .row { display:flex; flex-direction:column; gap:8px }
+    .row-h { display:flex; gap:8px; flex-wrap:wrap }
+    .label { color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em }
+    .value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
+    .hint { color:#64748b; font-size:.8rem }
+    .warn { color:#fbbf24; font-size:.85rem }
+    button { background: var(--brand); color:#0b1324; font-weight:700; padding:12px 14px; border-radius:10px; border:0; font-size:1rem }
+    button:active { transform: scale(.98) }
+    input.value, input[type="text"] { width:100%; background: var(--bg); color: var(--text); border:1px solid var(--b); border-radius:8px; padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    #coords { white-space: pre-line }
+    #videoWrap { position:relative; width:100%; border-radius:12px; overflow:hidden; border:1px solid var(--b); background:#000; display:none; }
+    video { width:100%; height:auto; }
+    #overlay { position:absolute; left:0; right:0; bottom:0; background: rgba(0,0,0,.55); color:#fff; padding:8px 10px; font-family: ui-monospace, Menlo, monospace; font-size:.85rem; line-height:1.2rem }
+    #topBadge { position:absolute; top:8px; left:8px; background: rgba(15,23,42,.7); color:#fff; padding:6px 10px; border-radius:999px; font-size:.75rem; border:1px solid rgba(255,255,255,.15) }
+    #previewImg { width:100%; max-height: 260px; object-fit:contain; display:none; border:1px solid var(--b); border-radius:8px }
+    .hidden { display:none !important }
+    #pr-badge{position:fixed;left:12px;bottom:12px;z-index:9999;background:#0f172a;color:#e2e8f0;
+      padding:8px 12px;border:1px solid #334155;border-radius:10px;font-family:system-ui,Segoe UI,Roboto,Arial;
+      box-shadow:0 6px 20px rgba(0,0,0,.35);}
+    #kml-box{max-width:720px;margin:16px auto;padding:12px;border:1px solid #334155;border-radius:12px;
+      background:#0b1220;color:#cbd5e1;font-family:system-ui,Segoe UI,Roboto,Arial;}
+    #kml-box .row{margin:8px 0}
+    .btn{cursor:pointer;padding:10px 14px;border-radius:10px;border:1px solid #334155;background:#111827;color:#e5e7eb}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  </style>
 </head>
 <body>
-    <h1>Calcular distancia desde inicio del tramo</h1>
-    <button id="getLocationBtn">Obtener ubicación y calcular distancia</button>
-    <p id="status"></p>
-    <p id="distance"></p>
-    <p id="prDisplay"></p>
-    <img id="preview" width="300" alt="Foto tomada">
-    <input type="file" accept="image/*" capture="environment" id="photoInput">
+  <header>
+    <h2>Registro PR</h2>
+    <div class="hint">GPS en vivo + cámara (overlay) con cálculo de distancia y PR por TRAMO usando PRs.csv</div>
+  </header>
+
+  <section class="card">
+    <div class="row">
+      <div class="label">Estado</div>
+      <div id="state" class="value">Cargando…</div>
+      <div class="hint">HTTPS requerido. En iPhone, Safari suele permitir cámara en vivo; PWA instalada puede usar fallback.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div class="label">Coordenadas en vivo</div>
+      <div id="coords" class="value">lat: —, lon: —\nprecisión: — m\nvelocidad: — m/s</div>
+      <button id="btnEnableGPS" class="hidden">Activar GPS</button>
+      <div class="hint">Intentamos iniciar automáticamente. Si no aparece nada, toca “Activar GPS”.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div class="label">Cámara</div>
+
+      <div id="videoWrap">
+        <div id="topBadge">Cámara activa</div>
+        <video id="video" autoplay playsinline muted></video>
+        <div id="overlay">lat: —, lon: — | precisión: — m | vel: — m/s | d: — m | PR: —</div>
+      </div>
+
+      <div id="cameraCtl" class="row-h">
+        <button id="btnOpenCam">Abrir cámara</button>
+        <button id="btnSnap" disabled>Capturar foto</button>
+      </div>
+
+      <div id="iosFileFallback" class="hidden">
+        <div class="warn">Modo alterno activo: toma una foto usando el selector del sistema:</div>
+        <input id="fileInput" type="file" accept="image/*" capture="environment"
+               style="display:block; width:100%; padding:12px; border:1px solid #334155; border-radius:8px; background:#0f172a; color:#f8fafc; margin-top:8px;" />
+      </div>
+
+      <img id="previewImg" alt="captura" />
+      <div class="hint">Si no abre la cámara en vivo, usa Safari o el modo alterno. Revisa permisos en Ajustes → Safari → Cámara / Localización.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div class="label">Nombre PR</div>
+      <input id="prField" class="value" placeholder="PR_000+000" />
+      <div class="row-h">
+        <button id="btnDownload" disabled>Descargar JPG</button>
+        <button id="btnShare" disabled>Compartir / Guardar en Fotos</button>
+        <button id="btnReset">Reiniciar</button>
+      </div>
+      <div class="hint">“Compartir” usa el Share Sheet si está disponible (iOS → Guardar imagen → va al Álbum de Fotos).</div>
+    </div>
+  </section>
+
+  <section class="card" id="calcBox">
+    <div class="row">
+      <div class="label">Cálculo por KML + PRs.csv</div>
+      <div class="grid-2">
+        <div>
+          <div class="label">Ruta (KML densificado)</div>
+          <input id="kmlInput" type="file" accept=".kml" />
+          <div id="kmlInfo" class="hint">Sin ruta cargada.</div>
+        </div>
+        <div>
+          <div class="label">PRs.csv (opcional para reemplazar)</div>
+          <input id="prsInput" type="file" accept=".csv" />
+          <div class="hint">Si no cargas, usaremos el PRs.csv del repositorio.</div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div class="label">TRAMO</div>
+          <input id="tramoField" type="text" value="4505" />
+        </div>
+        <div>
+          <div class="label">Salida</div>
+          <div id="outBox" class="value">d: — m | PR: —</div>
+        </div>
+      </div>
+      <div class="row-h">
+        <button id="btnTestCoords" class="btn" type="button">Probar con coordenadas actuales</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div class="label">Log</div>
+      <div id="log" class="value" style="white-space:pre-line">Listo.</div>
+    </div>
+  </section>
+
+  <div id="pr-badge">PR: —</div>
+
+<script>
+(function(){
+  // ===== DOM =====
+  const stateEl = document.getElementById('state');
+  const coordsEl = document.getElementById('coords');
+  const overlayEl = document.getElementById('overlay');
+  const videoWrap = document.getElementById('videoWrap');
+  const videoEl = document.getElementById('video');
+  const previewImg = document.getElementById('previewImg');
+  const cameraCtl = document.getElementById('cameraCtl');
+  const btnOpenCam = document.getElementById('btnOpenCam');
+  const btnSnap = document.getElementById('btnSnap');
+  const btnDownload = document.getElementById('btnDownload');
+  const btnShare = document.getElementById('btnShare');
+  const btnReset = document.getElementById('btnReset');
+  const prField = document.getElementById('prField');
+  const iosFileFallback = document.getElementById('iosFileFallback');
+  const fileInput = document.getElementById('fileInput');
+  const btnEnableGPS = document.getElementById('btnEnableGPS');
+  const logEl = document.getElementById('log');
+
+  const kmlInput = document.getElementById('kmlInput');
+  const prsInput = document.getElementById('prsInput');
+  const tramoField = document.getElementById('tramoField');
+  const kmlInfo  = document.getElementById('kmlInfo');
+  const outBox = document.getElementById('outBox');
+  const prBadge = document.getElementById('pr-badge');
+  const btnTest = document.getElementById('btnTestCoords');
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
+  function log(msg){ console.log(msg); logEl.textContent = msg; }
+
+  // ===== State =====
+  let watchId = null;
+  let lastCoords = null;
+  let mediaStream = null;
+  let lastPhotoBlob = null;
+
+  // Route data
+  let routePts = [];
+  let cumDist  = [];
+  let routeReady = false;
+
+  // PRs data for selected tramo
+  let prsData = [];   // array of {dist: Number, pr: String}
+  let prsReady = false;
+
+  // ====== Geolocation ======
+  function startWatchPosition(){
+    if (!navigator.geolocation) { stateEl.textContent = 'Geolocalización no soportada.'; return; }
+    try {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      watchId = navigator.geolocation.watchPosition((pos) => {
+        const { latitude, longitude, accuracy, speed } = pos.coords;
+        lastCoords = { latitude, longitude, accuracy, speed };
+        updateUIWithComputedPR();
+        const lat = latitude?.toFixed(6);
+        const lon = longitude?.toFixed(6);
+        const acc = (accuracy ?? NaN).toFixed(1);
+        const vel = (speed ?? 0);
+        const velFmt = (isFinite(vel) ? vel.toFixed(2) : '—');
+        coordsEl.textContent = `lat: ${lat}, lon: ${lon}\nprecisión: ${acc} m\nvelocidad: ${velFmt} m/s`;
+        stateEl.textContent = 'GPS activo (watchPosition).';
+      }, (err) => {
+        stateEl.textContent = 'Error GPS: ' + err.message;
+        btnEnableGPS.classList.remove('hidden');
+      }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    } catch(e){
+      stateEl.textContent = 'Excepción GPS: ' + e.message;
+      btnEnableGPS.classList.remove('hidden');
+    }
+  }
+  startWatchPosition();
+  btnEnableGPS.addEventListener('click', () => {
+    navigator.geolocation.getCurrentPosition(
+      () => { btnEnableGPS.classList.add('hidden'); startWatchPosition(); },
+      (err) => { stateEl.textContent = 'GPS denegado: ' + err.message; },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
+
+  // ====== Camera ======
+  function enableIOSFileFallback(){
+    iosFileFallback.classList.remove('hidden');
+    cameraCtl.classList.add('hidden');
+    videoWrap.style.display = 'none';
+    stateEl.textContent = 'Modo alterno de cámara activo (selector del sistema).';
+  }
+  async function openCameraStream(){
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ enableIOSFileFallback(); return; }
+    try {
+      const constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
+      mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      videoEl.srcObject = mediaStream;
+      videoWrap.style.display = 'block';
+      btnSnap.disabled = false;
+      stateEl.textContent = 'Cámara en vivo activa.';
+    } catch (e) {
+      stateEl.textContent = 'No se pudo abrir la cámara: ' + e.message;
+      enableIOSFileFallback();
+    }
+  }
+  if (isIOS && isStandalone){ enableIOSFileFallback(); }
+  btnOpenCam.addEventListener('click', openCameraStream);
+
+  // ====== Helpers: Math for distances ======
+  function haversine(lat1, lon1, lat2, lon2){
+    const R = 6371008.8;
+    const toRad = Math.PI/180;
+    const dLat = (lat2-lat1)*toRad;
+    const dLon = (lon2-lon1)*toRad;
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLon/2)**2;
+    return 2*R*Math.asin(Math.sqrt(a));
+  }
+  function toXY(lat, lon, lat0){
+    const R=6371008.8, toRad=Math.PI/180;
+    return { x: R*(lon*toRad)*Math.cos(lat0*toRad), y: R*(lat*toRad) };
+  }
+  function pointToSegmentProgress(lat, lon, A, B, lat0){
+    const P = toXY(lat, lon, lat0);
+    const a = toXY(A.lat, A.lon, lat0);
+    const b = toXY(B.lat, B.lon, lat0);
+    const vx=b.x-a.x, vy=b.y-a.y;
+    const wx=P.x-a.x, wy=P.y-a.y;
+    const L2 = vx*vx+vy*vy || 1e-9;
+    let t = (vx*wx+vy*wy)/L2; t=Math.max(0,Math.min(1,t));
+    const px=a.x+t*vx, py=a.y+t*vy;
+    const d = Math.hypot(P.x-px, P.y-py);
+    return {dist:d, t};
+  }
+
+  // ====== Parse KML ======
+  function parseKML(text){
+    const xml = new DOMParser().parseFromString(text, 'application/xml');
+    const nodes = Array.from(xml.getElementsByTagName('coordinates'));
+    const pts = [];
+    for (const n of nodes){
+      const raw = n.textContent.trim().split(/\s+/);
+      for (const s of raw){
+        const parts = s.split(',');
+        if (parts.length < 2) continue;
+        const lon = parseFloat(parts[0]), lat = parseFloat(parts[1]);
+        if (Number.isFinite(lat) && Number.isFinite(lon)){
+          const last=pts[pts.length-1];
+          if (!last || last.lat!==lat || last.lon!==lon) pts.push({lat,lon});
+        }
+      }
+    }
+    if (pts.length<2){ throw new Error('No se encontró LineString válida en el KML.'); }
+    return pts;
+  }
+  function buildCumDist(pts){
+    const acc=[0];
+    for (let i=1;i<pts.length;i++){
+      acc[i]=acc[i-1]+haversine(pts[i-1].lat,pts[i-1].lon,pts[i].lat,pts[i].lon);
+    }
+    return acc;
+  }
+  function distanceAlongRoute(lat, lon){
+    if (!routeReady) return null;
+    const lat0 = routePts[Math.floor(routePts.length/2)].lat;
+    let best={dist:Infinity,i:0,t:0};
+    for (let i=0;i<routePts.length-1;i++){
+      const res=pointToSegmentProgress(lat,lon,routePts[i],routePts[i+1],lat0);
+      if (res.dist<best.dist){ best={dist:res.dist,i,t:res.t}; }
+    }
+    const segLen=haversine(routePts[best.i].lat,routePts[best.i].lon,routePts[best.i+1].lat,routePts[best.i+1].lon);
+    const d = cumDist[best.i] + best.t*segLen; // metros desde el origen (vértice 0)
+    return { d, i:best.i, t:best.t };
+  }
+
+  // ====== PRs.csv handling (by TRAMO) ======
+  function parsePRsCSV(text){
+    // Expect columns: TRAMO, PR, DISTANCIA (meters from origin)
+    // Accept decimal comma in DISTANCIA too.
+    // Return map: tramo -> {dists: Float64Array, prs: string[]}
+    const rows = text.split(/\r?\n/).filter(Boolean);
+    if (rows.length === 0) return {};
+    const header = rows[0].split(',').map(s=>s.trim().replace(/^\ufeff/,''));
+    const idxTramo = header.findIndex(h=>/tramo/i.test(h));
+    const idxPR    = header.findIndex(h=>/^\s*pr\s*$/i.test(h));
+    const idxDist  = header.findIndex(h=>/distancia/i.test(h));
+    const map = {};
+    for (let i=1;i<rows.length;i++){
+      const cols = rows[i].split(',');
+      if (cols.length < 3) continue;
+      const tramo = (cols[idxTramo]||'').trim();
+      const pr    = (cols[idxPR]||'').trim();
+      let distRaw = (cols[idxDist]||'').trim().replace(',', '.');
+      const dist = parseFloat(distRaw);
+      if (!tramo || !pr || !isFinite(dist)) continue;
+      if (!map[tramo]) map[tramo] = [];
+      map[tramo].push({dist, pr});
+    }
+    // sort per tramo
+    Object.keys(map).forEach(t=> map[t].sort((a,b)=>a.dist-b.dist));
+    // compress
+    const out = {};
+    Object.keys(map).forEach(t=> {
+      out[t] = {
+        dists: Float64Array.from(map[t].map(o=>o.dist)),
+        prs: map[t].map(o=>o.pr)
+      };
+    });
+    return out;
+  }
+
+  let prsIndexByTramo = {}; // tramo -> {dists, prs}
+  async function loadDefaultPRs(){
+    try {
+      const res = await fetch('./PRs.csv', {cache:'no-cache'});
+      if (!res.ok) throw new Error('No se pudo leer PRs.csv del repo');
+      const txt = await res.text();
+      prsIndexByTramo = parsePRsCSV(txt);
+      prsReady = true;
+      log('PRs.csv cargado del repositorio.');
+    }catch(err){
+      prsReady = false;
+      log('No se pudo cargar PRs.csv por defecto: '+err.message);
+    }
+  }
+  loadDefaultPRs();
+
+  prsInput?.addEventListener('change', async (e)=>{
+    const f=e.target.files?.[0]; if (!f) return;
+    const txt = await f.text();
+    prsIndexByTramo = parsePRsCSV(txt);
+    prsReady = true;
+    log('PRs.csv cargado (archivo del usuario).');
+    updateUIWithComputedPR();
+  });
+
+  // Binary search like numpy searchsorted right-1
+  function searchRightMinusOne(arr, x){
+    let lo=0, hi=arr.length;
+    while (lo<hi){
+      const mid=(lo+hi)//2;
+      if (arr[mid] <= x) lo=mid+1;
+      else hi=mid;
+    }
+    return lo-1;
+  }
+
+  function computePRForDistance(d){
+    const tramo = (tramoField.value || '').trim();
+    if (!prsReady || !tramo || !prsIndexByTramo[tramo]){
+      // fallback to simple PR_XXX+YYY based only on distance, if PRs.csv not available
+      const km = Math.floor(d/1000);
+      const m  = Math.round(d - km*1000);
+      const prTxt = `PR_${String(km).padStart(3,'0')}+${String(m).padStart(3,'0')}`;
+      return { prTxt, basePR:null, metros:m };
+    }
+    const {dists, prs} = prsIndexByTramo[tramo];
+    if (!dists || dists.length===0){
+      const km = Math.floor(d/1000);
+      const m  = Math.round(d - km*1000);
+      return { prTxt:`PR_${String(km).padStart(3,'0')}+${String(m).padStart(3,'0')}`, basePR:null, metros:m };
+    }
+    const pos = searchRightMinusOne(dists, d);
+    if (pos < 0){
+      // before first PR: report PR of first and negative meters? Use 0+meters from 0
+      const km = Math.floor(d/1000);
+      const m  = Math.round(d - km*1000);
+      return { prTxt:`PR_${String(km).padStart(3,'0')}+${String(m).padStart(3,'0')}`, basePR:null, metros:m };
+    }
+    const baseDist = dists[pos];
+    const basePR   = prs[pos];
+    const metros   = Math.round(d - baseDist);
+    const prTxt = `${basePR.split('PR').join('PR').replace(/\s+/g,'').replace('_',' ').trim()} + ${String(Math.max(0,metros)).padStart(3,'0')}`.replace(/\s+\+\s+/,'+');
+    return { prTxt, basePR, metros };
+  }
+
+  function updatePRBadge(txt){
+    if (prBadge) prBadge.textContent = 'PR: ' + txt;
+  }
+
+  function updateUIWithComputedPR(){
+    if (!routeReady || !lastCoords) return;
+    const prog = distanceAlongRoute(lastCoords.latitude, lastCoords.longitude);
+    if (!prog) return;
+    const d = prog.d; // meters from origin
+    const pr = computePRForDistance(d);
+
+    // Update output panel and overlay
+    outBox.textContent = `d: ${Math.round(d)} m | PR: ${pr.prTxt}`;
+    overlayEl.textContent = `lat: ${lastCoords.latitude.toFixed(6)}, lon: ${lastCoords.longitude.toFixed(6)} | precisión: ${(lastCoords.accuracy??NaN).toFixed(1)} m | vel: ${isFinite(lastCoords.speed||NaN)? lastCoords.speed.toFixed(2):'—'} m/s | d: ${Math.round(d)} m | PR: ${pr.prTxt}`;
+
+    // Update PR field/badge
+    prField.value = pr.prTxt;
+    updatePRBadge(pr.prTxt);
+  }
+
+  // ===== KML load =====
+  kmlInput?.addEventListener('change', async (e)=>{
+    const f = e.target.files?.[0]; if (!f) return;
+    try{
+      const txt = await f.text();
+      routePts = parseKML(txt);
+      cumDist = buildCumDist(routePts);
+      routeReady = true;
+      const totalKm=(cumDist[cumDist.length-1]/1000).toFixed(3);
+      kmlInfo.textContent = `Ruta cargada: ${routePts.length} pts, longitud ≈ ${totalKm} km. Origen = 1er vértice.`;
+      updateUIWithComputedPR();
+    }catch(err){
+      routeReady=false;
+      kmlInfo.textContent = 'Error leyendo KML: ' + err.message;
+    }
+  });
+
+  // Test button
+  btnTest?.addEventListener('click', updateUIWithComputedPR);
+
+  // ====== Capture to JPG (adds overlay including distance + PR) ======
+  function makeFileFromBlob(blob, filename) {
+    try { return new File([blob], filename, { type: 'image/jpeg' }); }
+    catch { blob.lastModifiedDate = new Date(); blob.name = filename; return blob; }
+  }
+  function enableShareIfPossible(){
+    const name = (prField.value || 'PR_sin_nombre').trim() + '.jpg';
+    const fileObj = makeFileFromBlob(lastPhotoBlob, name);
+    const canShareFiles = navigator.canShare && navigator.canShare({ files: [fileObj] });
+    btnShare.disabled = !canShareFiles;
+  }
+  btnSnap.addEventListener('click', () => {
+    if (!videoEl.videoWidth) { log('Video no listo'); return; }
+    const canvas = document.createElement('canvas');
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(videoEl, 0, 0);
+    // barra + texto
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    const barH = Math.round(canvas.height * 0.07);
+    ctx.fillRect(0, canvas.height - barH, canvas.width, barH);
+    ctx.fillStyle = '#fff';
+    const fontSize = Math.max(18, Math.round(canvas.width * 0.03));
+    ctx.font = `${fontSize}px ui-monospace, Menlo, monospace`;
+    const txt = overlayEl.textContent || 'sin datos';
+    ctx.fillText(txt, Math.round(canvas.width*0.02), canvas.height - Math.round(barH*0.35));
+    canvas.toBlob((blob) => {
+      lastPhotoBlob = blob;
+      const url = URL.createObjectURL(blob);
+      previewImg.src = url;
+      previewImg.style.display = 'block';
+      btnDownload.disabled = false;
+      enableShareIfPossible();
+      log('Captura lista.');
+    }, 'image/jpeg', 0.92);
+  });
+
+  // Fallback: file input image -> overlay
+  fileInput?.addEventListener('change', async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const imgURL = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      const barH = Math.round(canvas.height * 0.07);
+      ctx.fillRect(0, canvas.height - barH, canvas.width, barH);
+      ctx.fillStyle = '#fff';
+      const fontSize = Math.max(18, Math.round(canvas.width * 0.03));
+      ctx.font = `${fontSize}px ui-monospace, Menlo, monospace`;
+      const text = overlayEl.textContent || 'sin coordenadas';
+      ctx.fillText(text, Math.round(canvas.width*0.02), canvas.height - Math.round(barH*0.35));
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(imgURL);
+        lastPhotoBlob = blob;
+        const url = URL.createObjectURL(blob);
+        previewImg.src = url;
+        previewImg.style.display = 'block';
+        btnDownload.disabled = false;
+        enableShareIfPossible();
+        log('Foto lista con overlay (fallback).');
+      }, 'image/jpeg', 0.92);
+    };
+    img.onerror = () => { URL.revokeObjectURL(imgURL); log('No se pudo cargar la imagen.'); };
+    img.src = imgURL;
+  });
+
+  // Descargar / Compartir
+  btnDownload.addEventListener('click', () => {
+    if (!lastPhotoBlob) { log('No hay captura.'); return; }
+    let name = (prField.value || 'PR_sin_nombre').trim();
+    if (!name.toLowerCase().endsWith('.jpg')) name += '.jpg';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(lastPhotoBlob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    log('Descargando ' + name);
+  });
+  btnShare.addEventListener('click', async () => {
+    if (!lastPhotoBlob) return;
+    const name = (prField.value || 'PR_sin_nombre').trim() + '.jpg';
+    const fileObj = makeFileFromBlob(lastPhotoBlob, name);
+    if (navigator.canShare && navigator.canShare({ files: [fileObj] })) {
+      try { await navigator.share({ files: [fileObj], title: name, text: 'Captura PR' });
+            log('Compartido. En iOS: elige “Guardar imagen” para Fotos.'); }
+      catch (err) { log('Compartir cancelado o falló: ' + err.message); }
+    } else { log('Este navegador no soporta Web Share con archivos. Usa Descargar.'); }
+  });
+  btnReset.addEventListener('click', () => {
+    previewImg.style.display = 'none'; previewImg.src = ''; lastPhotoBlob = null;
+    btnDownload.disabled = true; btnShare.disabled = true;
+  });
+
+  // Service worker
+  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./service-worker.js').catch(()=>{}); }
+  if (isIOS && isStandalone) {
+    const warn = document.createElement('div');
+    warn.className = 'warn';
+    warn.textContent = 'iOS (modo app) puede limitar la cámara en vivo. Fallback activado.';
+    document.querySelector('header')?.appendChild(warn);
+  }
+})();
+</script>
+
 </body>
 </html>
