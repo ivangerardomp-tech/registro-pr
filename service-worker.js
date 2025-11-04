@@ -2,6 +2,7 @@ self.addEventListener('install', e => {
   e.waitUntil(caches.open('distancia-pr').then(cache => cache.addAll([
     './index.html',
     './script.js',
+    './pr_map.js',
     './manifest.json'
   ])));
 });

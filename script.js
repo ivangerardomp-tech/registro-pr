@@ -40,21 +40,34 @@ function puntoMasCercano(coords, lat, lon) {
 document.getElementById("getLocationBtn").addEventListener("click", async () => {
   const status = document.getElementById("status");
   const distance = document.getElementById("distance");
+  const prDisplay = document.getElementById("prDisplay");
+
   status.textContent = "Cargando KML...";
 
-  const coords = await loadKML("ruta_densa_10m_4505.kml");
+  const kmlName = "ruta_densa_10m_4505.kml";
+  const tramoMatch = kmlName.match(/(\d{4,5})/);
+  const tramo = tramoMatch ? tramoMatch[1] : "4505";
+
+  const coords = await loadKML(kmlName);
   const distAcum = acumulada(coords);
 
   status.textContent = "Obteniendo ubicación GPS...";
 
-  navigator.geolocation.getCurrentPosition(pos => {
+  navigator.geolocation.getCurrentPosition(async pos => {
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
 
     const idx = puntoMasCercano(coords, lat, lon);
-    const dist = distAcum[idx];
+    const d = distAcum[idx];
     status.textContent = "Ubicación obtenida ✅";
-    distance.textContent = `Distancia desde inicio del tramo: ${dist.toFixed(1)} m`;
+    distance.textContent = `Distancia desde inicio del tramo: ${d.toFixed(1)} m`;
+
+    // --- Calcular PR basado en PRs.csv --- //
+    await PRHelper.loadPRs();
+    const prData = PRHelper.prFromDistance(tramo, d);
+    if (prData && prData.texto) {
+      prDisplay.textContent = `Ubicación aproximada: ${prData.texto} (${prData.entre})`;
+    }
   }, err => {
     status.textContent = "Error obteniendo ubicación: " + err.message;
   });
