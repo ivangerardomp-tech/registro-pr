@@ -1,6 +1,6 @@
-# Registro PR Live — Fix
+# Registro PR Live (v12)
 
-- Lee **PRs.csv** desde la misma carpeta del `index.html` (GitHub Pages).
-- Si no calcula PR: forzar recarga (Ctrl+F5), o en móvil borrar datos del sitio para actualizar el Service Worker.
-- iOS PWA: si la cámara no abre, usa el **selector** (input `capture=environment`).
+- Lee **PRs.csv** desde el repositorio (misma carpeta de `index.html`).
+- Si ves algo extraño, haz una **recarga fuerte** (Ctrl+F5) o borra datos del sitio para refrescar el Service Worker.
+- iOS PWA: si la cámara no abre, usa el **selector** (input con `capture=environment`).
 
