@@ -1,5 +1,5 @@
 {
-  "name": "Registro PR Live + Distancia",
+  "name": "Registro PR Live + PRs.csv (Repo)",
   "short_name": "PR Live",
   "start_url": "./index.html",
   "display": "standalone",

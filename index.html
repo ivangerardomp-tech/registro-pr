@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Registro PR (GPS + Distancia KML)</title>
+  <title>Registro PR (KML + PRs del repo)</title>
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#0f172a" />
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,7 +12,7 @@
   <style>
     :root { --bg:#0f172a; --card:#1e2537; --b:#334155; --text:#f8fafc; --muted:#94a3b8; --brand:#38bdf8; }
     * { box-sizing:border-box }
-    body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; padding:16px; max-width: 640px; margin:0 auto; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; padding:16px; max-width: 740px; margin:0 auto; }
     header { text-align:center; margin-bottom: 12px; }
     .card { background: var(--card); border:1px solid var(--b); border-radius:12px; padding:14px; margin-bottom:12px; }
     .row { display:flex; flex-direction:column; gap:8px }
@@ -33,12 +33,13 @@
     .hidden { display:none !important }
     .ok { color:#22c55e }
     .bad { color:#ef4444 }
+    .pill { padding:4px 8px; border:1px solid var(--b); border-radius:999px; font-size:.8rem; background:#0b1324 }
   </style>
 </head>
 <body>
   <header>
     <h2>Registro PR</h2>
-    <div class="hint">Carga un KML densificado y calcula distancia desde el origen de la ruta al GPS.</div>
+    <div class="hint">La app lee <b>PRs.csv</b> directamente del repositorio (misma carpeta que este archivo).</div>
   </header>
 
   <section class="card">
@@ -47,19 +48,28 @@
       <div class="row-h">
         <input id="kmlFile" type="file" accept=".kml" />
         <button id="btnLoadKML">Leer KML</button>
+        <span id="tramoBadge" class="pill hidden"></span>
       </div>
       <div id="kmlStatus" class="value">Sin ruta.</div>
-      <div class="row-h">
-        <label class="label" for="offsetm">Offset PR (m desde PR0 al inicio del KML):</label>
-        <input id="offsetm" type="number" step="1" value="0" class="value" />
-      </div>
-      <div class="hint">El lector soporta &lt;LineString/coordinates&gt; y &lt;gx:Track/gx:coord&gt;.</div>
+      <div class="hint">El tramo se infiere del nombre, p.ej.: <b>ruta_densa_10m_4505.kml ⇒ TRAMO=4505</b>.</div>
     </div>
   </section>
 
   <section class="card">
     <div class="row">
-      <div class="label">2) GPS en vivo</div>
+      <div class="label">2) PRs.csv del repositorio</div>
+      <div class="row-h">
+        <button id="btnLoadRepoPRS">Cargar PRs del repo</button>
+        <span id="prsBadge" class="pill hidden"></span>
+      </div>
+      <div id="prsStatus" class="value">Esperando cargar PRs.csv…</div>
+      <div class="hint">Debe existir un archivo <b>PRs.csv</b> junto a este <code>index.html</code>.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div class="label">3) GPS en vivo</div>
       <div id="state" class="value">Cargando…</div>
       <div id="coords" class="value">lat: —, lon: —\nprecisión: — m\nvelocidad: — m/s</div>
       <button id="btnEnableGPS" class="hidden">Activar GPS</button>
@@ -69,13 +79,13 @@
 
   <section class="card">
     <div class="row">
-      <div class="label">3) Entrar coordenadas manuales (opcional)</div>
+      <div class="label">4) Entrar coordenadas manuales (opcional)</div>
       <div class="row-h">
         <input id="latIn" class="value" placeholder="lat" />
         <input id="lonIn" class="value" placeholder="lon" />
+        <input id="offsetm" type="number" step="1" value="0" class="value" placeholder="offset PR (m)" />
         <button id="btnCalc">Calcular</button>
       </div>
-      <div class="hint">Usa el GPS o ingresa lat/lon para probar.</div>
     </div>
   </section>
 
@@ -83,7 +93,6 @@
     <div class="row">
       <div class="label">Resultados</div>
       <div id="result" class="value">—</div>
-      <div class="hint">PR = ⌊(offset + distancia)/1000⌋ + (offset + distancia) % 1000.</div>
     </div>
   </section>
 
@@ -93,16 +102,11 @@
       <div id="videoWrap">
         <div id="topBadge">Cámara activa</div>
         <video id="video" autoplay playsinline muted></video>
-        <div id="overlay">lat: —, lon: — | precisión: — m | vel: — m/s</div>
+        <div id="overlay">lat: —, lon: — | precisión: — m | vel: — m/s | PR: —</div>
       </div>
       <div id="cameraCtl" class="row-h">
         <button id="btnOpenCam">Abrir cámara</button>
         <button id="btnSnap" disabled>Capturar foto</button>
-      </div>
-      <div id="iosFileFallback" class="hidden">
-        <div class="warn">Modo alterno activo: toma una foto usando el selector del sistema:</div>
-        <input id="fileInput" type="file" accept="image/*" capture="environment"
-               style="display:block; width:100%; padding:12px; border:1px solid #334155; border-radius:8px; background:#0f172a; color:#f8fafc; margin-top:8px;" />
       </div>
       <img id="previewImg" alt="captura" />
     </div>
@@ -128,56 +132,110 @@
   </section>
 
 <script>
-const R = 6371000; // radio WGS84 aproximado
+const R = 6371000;
 function toRad(d){ return d * Math.PI / 180; }
-
-// Haversine (m)
 function haversine(lat1, lon1, lat2, lon2){
-  const dLat = toRad(lat2-lat1);
-  const dLon = toRad(lon2-lon1);
+  const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
   const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
-
-// Proyección local (equirectangular)
 function makeLocalProjector(lat0, lon0){
   const cos0 = Math.cos(toRad(lat0));
   return {
-    toXY(lat, lon){
-      const x = R * toRad(lon - lon0) * cos0;
-      const y = R * toRad(lat - lat0);
-      return [x, y];
-    },
-    toLL(x, y){
-      const lat = (y / R) * 180/Math.PI + lat0;
-      const lon = (x / (R * cos0)) * 180/Math.PI + lon0;
-      return [lat, lon];
-    }
+    toXY(lat, lon){ return [ R * toRad(lon - lon0) * cos0, R * toRad(lat - lat0) ]; },
+    toLL(x, y){ return [ (y / R) * 180/Math.PI + lat0, (x / (R * cos0)) * 180/Math.PI + lon0 ]; }
   }
 }
-
-// Distancia acumulada (m) vértice a vértice
 function cumulativeGeodesic(pointsLL){
-  const n = pointsLL.length;
-  const cum = new Float64Array(n);
-  let acc = 0;
-  for (let i=0;i<n-1;i++){
-    const [aLat, aLon] = pointsLL[i];
-    const [bLat, bLon] = pointsLL[i+1];
-    acc += haversine(aLat,aLon,bLat,bLon);
-    cum[i+1] = acc;
-  }
+  const n = pointsLL.length, cum = new Float64Array(n); let acc = 0;
+  for (let i=0;i<n-1;i++){ const [aLat,aLon]=pointsLL[i], [bLat,bLon]=pointsLL[i+1]; acc += haversine(aLat,aLon,bLat,bLon); cum[i+1]=acc; }
   return cum;
 }
+function parseCSV(text){
+  const sep = (text.indexOf(";") > -1 && text.indexOf(",") > -1) ? "," : (text.indexOf(";") > -1 ? ";" : ",");
+  const rows = [];
+  let i=0, cur="", inQ=false; let row=[];
+  const pushCell = (cell) => { row.push(cell.replace(/^\ufeff/,"")); };
+  const pushRow = () => { rows.push(row); row=[]; };
+  while (i < text.length){
+    const ch = text[i];
+    if (inQ){
+      if (ch === '"'){ if (text[i+1] === '"'){ cur+='"'; i+=2; continue; } inQ=false; i++; continue; }
+      cur+=ch; i++; continue;
+    } else {
+      if (ch === '"'){ inQ=true; i++; continue; }
+      if (ch === sep){ pushCell(cur); cur=""; i++; continue; }
+      if (ch === '\n'){ pushCell(cur); cur=""; pushRow(); i++; continue; }
+      if (ch === '\r'){ i++; continue; }
+      cur += ch; i++;
+    }
+  }
+  if (cur.length || row.length){ pushCell(cur); pushRow(); }
+  const header = rows.shift().map(h => h.trim());
+  return rows.map(r => { const o={}; r.forEach((v,idx)=>o[header[idx]]=(v??"").trim()); return o; });
+}
+function numOrNaN(x){
+  if (x==null) return NaN;
+  let s = String(x).trim().replace(",", ".");
+  if (s==="") return NaN;
+  const v = Number(s);
+  return Number.isFinite(v) ? v : NaN;
+}
 
-// Lector robusto de KML
+// State
+let locator = null;
+let tramoActual = null;
+let prsIndex = new Map();
+let lastCoords = null, watchId = null;
+const stateEl = document.getElementById('state');
+const coordsEl = document.getElementById('coords');
+const resultEl = document.getElementById('result');
+const overlayEl = document.getElementById('overlay');
+const prField = document.getElementById('prField');
+const tramoBadge = document.getElementById('tramoBadge');
+const prsBadge = document.getElementById('prsBadge');
+const logEl = document.getElementById('log');
+
+function log(msg){ console.log(msg); if (logEl) logEl.textContent = msg; }
+function inferTramoFromKMLName(name){ const m = name.match(/ruta_densa_10m_([\w-]+)\.kml$/i); return m ? m[1].toUpperCase() : null; }
+
+async function loadPRsFromRepo(){
+  try{
+    const r = await fetch('./PRs.csv', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const text = await r.text();
+    const rows = parseCSV(text);
+    const byTramo = new Map();
+    for (const r of rows){
+      const tramo = String((r["TRAMO"] ?? r["tramo"] ?? "")).trim().toUpperCase();
+      const pr = String(r["PR"] ?? r["pr"] ?? "").trim();
+      const dist = numOrNaN(r["DISTANCIA"] ?? r["distancia"]);
+      if (!tramo || !pr || !Number.isFinite(dist)) continue;
+      if (!byTramo.has(tramo)) byTramo.set(tramo, []);
+      byTramo.get(tramo).push({ d: dist, pr });
+    }
+    prsIndex = new Map();
+    for (const [tramo, arr] of byTramo){
+      arr.sort((a,b) => a.d - b.d);
+      prsIndex.set(tramo, { dist: Float64Array.from(arr.map(o=>o.d)), pr: arr.map(o=>o.pr) });
+    }
+    const nTramos = prsIndex.size;
+    const totalPRS = [...prsIndex.values()].reduce((acc,v)=> acc + v.dist.length, 0);
+    document.getElementById('prsStatus').innerHTML = `<span class="ok">PRs cargados del repo.</span> Tramos: ${nTramos}, filas: ${totalPRS}.`;
+    prsBadge.textContent = 'PRs.csv cargado';
+    prsBadge.classList.remove('hidden');
+  }catch(e){
+    document.getElementById('prsStatus').innerHTML = '<span class="bad">No se pudo leer PRs.csv del repo: '+ e.message +'</span>';
+  }
+}
+document.getElementById('btnLoadRepoPRS').addEventListener('click', loadPRsFromRepo);
+// Auto-carga al iniciar
+loadPRsFromRepo();
+
+// KML + locator
 async function parseKML(file){
   const text = await file.text();
-  const parser = new DOMParser();
-  const xml = parser.parseFromString(text, "application/xml");
-
-  // try LineString/coordinates
+  const xml = new DOMParser().parseFromString(text, "application/xml");
   const coordsNodes = Array.from(xml.getElementsByTagName("coordinates"));
   let lonlat = [];
   for (const node of coordsNodes){
@@ -187,14 +245,10 @@ async function parseKML(file){
     for (const tok of tokens){
       const parts = tok.split(",");
       if (parts.length >= 2){
-        const lon = parseFloat(parts[0]);
-        const lat = parseFloat(parts[1]);
-        lonlat.push([lon, lat]);
+        lonlat.push([parseFloat(parts[0]), parseFloat(parts[1])]);
       }
     }
   }
-
-  // gx:Track/gx:coord
   const gxNS = "http://www.google.com/kml/ext/2.2";
   const coordTags = xml.getElementsByTagNameNS(gxNS, "coord");
   for (const node of coordTags){
@@ -205,22 +259,14 @@ async function parseKML(file){
       lonlat.push([parseFloat(parts[0]), parseFloat(parts[1])]);
     }
   }
-
   if (!lonlat.length) throw new Error("No se encontró geometría de línea en el KML.");
-
-  // Evitar duplicados contiguos y convertir a [lat, lon]
-  const merged = [];
-  let last0=null, last1=null;
+  const merged = []; let last0=null, last1=null;
   for (const [lon,lat] of lonlat){
-    if (last0===lon && last1===lat) continue;
-    merged.push([lat,lon]);
-    last0=lon; last1=lat;
+    if (last0===lon && last1===lat) continue; merged.push([lat,lon]); last0=lon; last1=lat;
   }
   if (merged.length < 2) throw new Error("La línea resultante tiene menos de 2 vértices.");
   return merged;
 }
-
-// Locator
 function buildLocator(densePoints){
   const [lat0, lon0] = densePoints[0];
   const proj = makeLocalProjector(lat0, lon0);
@@ -228,117 +274,47 @@ function buildLocator(densePoints){
   const cum = cumulativeGeodesic(densePoints);
   return { proj, XY, LL: densePoints, cum };
 }
-
-// Distancia desde origen para un punto
-function distanceFromOrigin(queryLat, queryLon, locator){
-  const { proj, XY, LL, cum } = locator;
-  const [px, py] = proj.toXY(queryLat, queryLon);
-
-  // vértice más cercano (lineal)
-  let bestK = 0, bestD2 = Infinity;
-  for (let k=0;k<XY.length;k++){
-    const [x,y] = XY[k];
-    const dx = x - px, dy = y - py;
-    const d2 = dx*dx + dy*dy;
-    if (d2 < bestD2){ bestD2 = d2; bestK = k; }
-  }
-
-  // vecinos
-  const candidates = [];
-  if (bestK > 0) candidates.push([bestK-1, bestK]);
-  if (bestK < XY.length-1) candidates.push([bestK, bestK+1]);
-
+function distanceFromOrigin(lat, lon, loc){
+  const { proj, XY, LL, cum } = loc;
+  const [px, py] = proj.toXY(lat, lon);
+  let bestK=0, bestD2=Infinity;
+  for (let k=0;k<XY.length;k++){ const [x,y]=XY[k]; const dx=x-px, dy=y-py; const d2=dx*dx+dy*dy; if (d2<bestD2){bestD2=d2; bestK=k;} }
+  const cands=[]; if (bestK>0) cands.push([bestK-1,bestK]); if (bestK<XY.length-1) cands.push([bestK,bestK+1]);
   let best=null, bestSegD2=Infinity;
-  for (const [i0,i1] of candidates){
-    const A = XY[i0], B = XY[i1];
-    const ABx = B[0]-A[0], ABy=B[1]-A[1];
-    const AB2 = ABx*ABx + ABy*ABy;
-    if (AB2 === 0) continue;
-    const APx = px - A[0], APy = py - A[1];
-    const t = Math.max(0, Math.min(1, (APx*ABx + APy*ABy)/AB2));
-    const projx = A[0] + t*ABx;
-    const projy = A[1] + t*ABy;
-    const dx = projx - px, dy = projy - py;
-    const d2 = dx*dx + dy*dy;
-    if (d2 < bestSegD2){
-      bestSegD2 = d2;
-      best = { i0, i1, t, projxy:[projx,projy] };
-    }
+  for (const [i0,i1] of cands){
+    const A=XY[i0], B=XY[i1]; const ABx=B[0]-A[0], ABy=B[1]-A[1]; const AB2=ABx*ABx+ABy*ABy; if (AB2===0) continue;
+    const APx=px-A[0], APy=py-A[1]; const t=Math.max(0,Math.min(1,(APx*ABx+APy*ABy)/AB2));
+    const projx=A[0]+t*ABx, projy=A[1]+t*ABy; const dx=projx-px, dy=projy-py; const d2=dx*dx+dy*dy;
+    if (d2<bestSegD2){ bestSegD2=d2; best={i0,i1,t,projxy:[projx,projy]}; }
   }
-
-  const [projLat, projLon] = proj.toLL(best.projxy[0], best.projxy[1]);
-  const dToRoute = haversine(queryLat, queryLon, projLat, projLon);
-  const i0 = best.i0;
-  const partial = haversine(LL[i0][0], LL[i0][1], projLat, projLon);
+  const [projLat, projLon] = loc.proj.toLL(best.projxy[0], best.projxy[1]);
+  const dToRoute = haversine(lat, lon, projLat, projLon);
+  const i0=best.i0; const partial = haversine(LL[i0][0], LL[i0][1], projLat, projLon);
   const distFromOrigin = cum[i0] + partial;
-
-  return {
-    distance_from_origin_m: distFromOrigin,
-    distance_to_route_m: dToRoute,
-    nearest_latlon: [projLat, projLon],
-    segment_index: i0
-  };
+  return { distance_from_origin_m: distFromOrigin, distance_to_route_m: dToRoute, nearest_latlon:[projLat,projLon], segment_index:i0 };
 }
 
-// UI wiring
-const kmlFile = document.getElementById('kmlFile');
-const btnLoadKML = document.getElementById('btnLoadKML');
-const kmlStatus = document.getElementById('kmlStatus');
-const stateEl = document.getElementById('state');
-const coordsEl = document.getElementById('coords');
-const btnEnableGPS = document.getElementById('btnEnableGPS');
-const resultEl = document.getElementById('result');
-const latIn = document.getElementById('latIn');
-const lonIn = document.getElementById('lonIn');
-const btnCalc = document.getElementById('btnCalc');
-const offsetmEl = document.getElementById('offsetm');
-const overlayEl = document.getElementById('overlay');
-const prField = document.getElementById('prField');
-
-let locator = null;
-let lastCoords = null;
-let watchId = null;
-
-function fmtPR(m){
-  const val = Math.max(0, m);
-  const pr = Math.floor(val/1000);
-  const mm = Math.round(val - pr*1000);
-  return `${String(pr).padStart(3,'0')}+${String(mm).padStart(3,'0')}`;
-}
-function renderResult(res){
-  if (!res){ resultEl.textContent = '—'; return; }
-  const offset = Number(offsetmEl.value||0);
-  const mFrom0 = res.distance_from_origin_m;
-  const prStr = fmtPR(offset + mFrom0);
-  const dRoute = res.distance_to_route_m;
-  const [nlat,nlon] = res.nearest_latlon;
-  resultEl.textContent =
-`dist_origen: ${mFrom0.toFixed(2)} m
-dist_a_ruta: ${dRoute.toFixed(2)} m
-pie: lat ${nlat.toFixed(6)}, lon ${nlon.toFixed(6)}
-segmento: ${res.segment_index}
-PR: ${prStr}`;
-
-  // actualizar overlay si hay GPS vivo
-  if (lastCoords){
-    const lat = lastCoords.latitude.toFixed(6);
-    const lon = lastCoords.longitude.toFixed(6);
-    const acc = (lastCoords.accuracy ?? NaN).toFixed(1);
-    overlayEl.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m | PR: ${prStr} | km: ${( (offset+mFrom0)/1000 ).toFixed(3)}`;
-    if (!prField.value) prField.value = `PR_${prStr}`;
-  }
-}
-
-btnLoadKML.addEventListener('click', async () => {
+// Manual
+document.getElementById('btnLoadKML').addEventListener('click', async () => {
   try{
-    const f = kmlFile.files?.[0];
-    if (!f){ kmlStatus.innerHTML = '<span class="bad">Seleccione un KML.</span>'; return; }
+    const f = document.getElementById('kmlFile').files?.[0];
+    if (!f){ document.getElementById('kmlStatus').innerHTML = '<span class="bad">Seleccione un KML.</span>'; return; }
     const pts = await parseKML(f);
     locator = buildLocator(pts);
-    kmlStatus.innerHTML = `<span class="ok">Ruta cargada:</span> ${pts.length} vértices.`;
+    document.getElementById('kmlStatus').innerHTML = `<span class="ok">Ruta cargada:</span> ${pts.length} vértices.`;
+    tramoActual = inferTramoFromKMLName(f.name);
+    const tb = document.getElementById('tramoBadge');
+    if (tramoActual){ tb.textContent = 'TRAMO: ' + tramoActual; tb.classList.remove('hidden'); } else { tb.classList.add('hidden'); }
   }catch(e){
-    kmlStatus.innerHTML = '<span class="bad">Error: '+ e.message +'</span>';
+    document.getElementById('kmlStatus').innerHTML = '<span class="bad">Error: '+ e.message +'</span>';
   }
+});
+document.getElementById('btnCalc').addEventListener('click', () => {
+  if (!locator){ document.getElementById('result').textContent = 'Cargue primero un KML.'; return; }
+  const lat = Number(document.getElementById('latIn').value), lon = Number(document.getElementById('lonIn').value);
+  if (!isFinite(lat) || !isFinite(lon)){ document.getElementById('result').textContent = 'Lat/lon inválidos.'; return; }
+  const res = distanceFromOrigin(lat, lon, locator);
+  renderResult(res);
 });
 
 // GPS
@@ -355,7 +331,6 @@ function startWatchPosition(){
       const vel = (speed ?? 0);
       const velFmt = (isFinite(vel) ? vel.toFixed(2) : '—');
       coordsEl.textContent = `lat: ${lat}, lon: ${lon}\nprecisión: ${acc} m\nvelocidad: ${velFmt} m/s`;
-
       if (locator){
         const res = distanceFromOrigin(latitude, longitude, locator);
         renderResult(res);
@@ -363,72 +338,36 @@ function startWatchPosition(){
       stateEl.textContent = 'GPS activo (watchPosition).';
     }, (err) => {
       stateEl.textContent = 'Error GPS: ' + err.message;
-      btnEnableGPS.classList.remove('hidden');
+      document.getElementById('btnEnableGPS').classList.remove('hidden');
     }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   } catch(e){
     stateEl.textContent = 'Excepción GPS: ' + e.message;
-    btnEnableGPS.classList.remove('hidden');
+    document.getElementById('btnEnableGPS').classList.remove('hidden');
   }
 }
 startWatchPosition();
-btnEnableGPS.addEventListener('click', () => {
+document.getElementById('btnEnableGPS').addEventListener('click', () => {
   navigator.geolocation.getCurrentPosition(
-    () => { btnEnableGPS.classList.add('hidden'); startWatchPosition(); },
+    () => { document.getElementById('btnEnableGPS').classList.add('hidden'); startWatchPosition(); },
     (err) => { stateEl.textContent = 'GPS denegado: ' + err.message; },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
 });
 
-// Manual
-btnCalc.addEventListener('click', () => {
-  if (!locator){ resultEl.textContent = 'Cargue primero un KML.'; return; }
-  const lat = Number(latIn.value), lon = Number(lonIn.value);
-  if (!isFinite(lat) || !isFinite(lon)){ resultEl.textContent = 'Lat/lon inválidos.'; return; }
-  const res = distanceFromOrigin(lat, lon, locator);
-  renderResult(res);
-});
-
-// Cámara (idéntico al build anterior, con fallback)
-const videoWrap = document.getElementById('videoWrap');
-const videoEl = document.getElementById('video');
-const previewImg = document.getElementById('previewImg');
-const cameraCtl = document.getElementById('cameraCtl');
-const btnOpenCam = document.getElementById('btnOpenCam');
-const btnSnap = document.getElementById('btnSnap');
-const btnDownload = document.getElementById('btnDownload');
-const btnShare = document.getElementById('btnShare');
-const btnReset = document.getElementById('btnReset');
-const iosFileFallback = document.getElementById('iosFileFallback');
-const fileInput = document.getElementById('fileInput');
-const logEl = document.getElementById('log');
-let mediaStream = null, lastPhotoBlob = null;
-
-function log(msg){ console.log(msg); if (logEl) logEl.textContent = msg; }
-
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-
-function enableIOSFileFallback(){
-  iosFileFallback.classList.remove('hidden');
-  cameraCtl.classList.add('hidden');
-  videoWrap.style.display = 'none';
-  stateEl.textContent = 'Modo alterno de cámara activo (selector del sistema).';
-}
+// Cámara
 async function openCameraStream(){
-  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ enableIOSFileFallback(); return; }
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ return; }
   try {
     const constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
-    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-    videoEl.srcObject = mediaStream;
-    videoWrap.style.display = 'block';
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    videoEl.srcObject = stream;
+    document.getElementById('videoWrap').style.display = 'block';
     btnSnap.disabled = false;
     stateEl.textContent = 'Cámara en vivo activa.';
   } catch (e) {
     stateEl.textContent = 'No se pudo abrir la cámara: ' + e.message;
-    enableIOSFileFallback();
   }
 }
-if (isIOS && isStandalone){ enableIOSFileFallback(); }
 btnOpenCam.addEventListener('click', openCameraStream);
 
 btnSnap.addEventListener('click', () => {
@@ -438,103 +377,42 @@ btnSnap.addEventListener('click', () => {
   canvas.height = videoEl.videoHeight;
   const ctx = canvas.getContext('2d');
   ctx.drawImage(videoEl, 0, 0);
-  // barra + texto
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   const barH = Math.round(canvas.height * 0.07);
   ctx.fillRect(0, canvas.height - barH, canvas.width, barH);
   ctx.fillStyle = '#fff';
   const fontSize = Math.max(18, Math.round(canvas.width * 0.03));
   ctx.font = `${fontSize}px ui-monospace, Menlo, monospace`;
-  ctx.fillText(overlayEl.textContent, Math.round(canvas.width*0.02), canvas.height - Math.round(barH*0.35));
+  ctx.fillText(document.getElementById('overlay').textContent, Math.round(canvas.width*0.02), canvas.height - Math.round(barH*0.35));
   canvas.toBlob((blob) => {
-    lastPhotoBlob = blob;
     const url = URL.createObjectURL(blob);
     previewImg.src = url;
     previewImg.style.display = 'block';
     btnDownload.disabled = false;
-    enableShareIfPossible();
-    log('Captura lista.');
+    // share support
+    const name = (prField.value || 'PR_sin_nombre').trim() + '.jpg';
+    const fileObj = new File([blob], name, { type:'image/jpeg' });
+    btnShare.disabled = !(navigator.canShare && navigator.canShare({ files: [fileObj] }));
+    btnShare.onclick = async () => {
+      try { await navigator.share({ files: [fileObj], title: name, text: 'Captura PR' }); } catch {}
+    };
+    btnDownload.onclick = () => {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
   }, 'image/jpeg', 0.92);
 });
 
-fileInput?.addEventListener('change', async (e) => {
-  const f = e.target.files?.[0];
-  if (!f) return;
-  const imgURL = URL.createObjectURL(f);
-  const img = new Image();
-  img.onload = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    const barH = Math.round(canvas.height * 0.07);
-    ctx.fillRect(0, canvas.height - barH, canvas.width, barH);
-    ctx.fillStyle = '#fff';
-    const fontSize = Math.max(18, Math.round(canvas.width * 0.03));
-    ctx.font = `${fontSize}px ui-monospace, Menlo, monospace`;
-    const text = overlayEl.textContent || 'sin coordenadas';
-    ctx.fillText(text, Math.round(canvas.width*0.02), canvas.height - Math.round(barH*0.35));
-    canvas.toBlob((blob) => {
-      URL.revokeObjectURL(imgURL);
-      lastPhotoBlob = blob;
-      const url = URL.createObjectURL(blob);
-      previewImg.src = url;
-      previewImg.style.display = 'block';
-      btnDownload.disabled = false;
-      enableShareIfPossible();
-      log('Foto lista con overlay (fallback).');
-    }, 'image/jpeg', 0.92);
-  };
-  img.onerror = () => { URL.revokeObjectURL(imgURL); log('No se pudo cargar la imagen.'); };
-  img.src = imgURL;
-});
-
-function makeFileFromBlob(blob, filename) {
-  try { return new File([blob], filename, { type: 'image/jpeg' }); }
-  catch { blob.lastModifiedDate = new Date(); blob.name = filename; return blob; }
-}
-function enableShareIfPossible(){
-  const name = (prField.value || 'PR_sin_nombre').trim() + '.jpg';
-  const fileObj = makeFileFromBlob(lastPhotoBlob, name);
-  const canShareFiles = navigator.canShare && navigator.canShare({ files: [fileObj] });
-  btnShare.disabled = !canShareFiles;
-}
-btnDownload.addEventListener('click', () => {
-  if (!lastPhotoBlob) { log('No hay captura.'); return; }
-  let name = (prField.value || 'PR_sin_nombre').trim();
-  if (!name.toLowerCase().endsWith('.jpg')) name += '.jpg';
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(lastPhotoBlob);
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  log('Descargando ' + name);
-});
-btnShare.addEventListener('click', async () => {
-  if (!lastPhotoBlob) return;
-  const name = (prField.value || 'PR_sin_nombre').trim() + '.jpg';
-  const fileObj = makeFileFromBlob(lastPhotoBlob, name);
-  if (navigator.canShare && navigator.canShare({ files: [fileObj] })) {
-    try { await navigator.share({ files: [fileObj], title: name, text: 'Captura PR' });
-          log('Compartido. En iOS: elige “Guardar imagen” para Fotos.'); }
-    catch (err) { log('Compartir cancelado o falló: ' + err.message); }
-  } else { log('Este navegador no soporta Web Share con archivos. Usa Descargar.'); }
-});
 btnReset.addEventListener('click', () => {
-  previewImg.style.display = 'none'; previewImg.src = ''; lastPhotoBlob = null;
+  previewImg.style.display = 'none'; previewImg.src = '';
   btnDownload.disabled = true; btnShare.disabled = true;
 });
 
 // SW
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./service-worker.js').catch(()=>{}); }
-if (isIOS && isStandalone) {
-  const warn = document.createElement('div');
-  warn.className = 'warn';
-  warn.textContent = 'iOS (modo app) puede limitar la cámara en vivo. Fallback activado.';
-  document.querySelector('header')?.appendChild(warn);
-}
 </script>
 </body>
 </html>

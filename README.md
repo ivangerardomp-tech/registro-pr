@@ -1,25 +1,12 @@
-# Registro PR Live + Distancia desde origen (PWA)
+# Registro PR Live (PWA) — Lee PRs.csv del repositorio
 
-Esta versión agrega **carga de KML** y el cálculo en el navegador de:
-- Distancia desde el **inicio de la ruta** (m)
-- Distancia mínima del GPS a la ruta (m)
-- Punto más cercano (lat, lon) y segmento
-- Conversión a PR `NNN+MMM` (PR 0 en el inicio del KML, o con offset manual)
+- Coloca **PRs.csv** en la **misma carpeta** que `index.html` (raíz del repo de GitHub Pages).
+- La app lo carga automáticamente desde `./PRs.csv` (sin subir archivos).
+- El TRAMO se infiere del nombre del KML, p.ej. `ruta_densa_10m_4505.kml → TRAMO=4505`.
+- Cálculo de PR: mayor `DISTANCIA` ≤ (distancia_origen + offset), `METROS = objetivo − DISTANCIA(PR)`, redondeado.
 
-**Cómo usar**
-
-1) Abra `index.html` en HTTPS (GitHub Pages).
-2) Cargue su archivo KML densificado (ej. cada 10 m). El lector soporta `<LineString><coordinates>` y `gx:Track/gx:coord`.
-3) Active el GPS y/o introduzca coordenadas manuales para calcular.
-4) Opcional: establezca un **offset PR (m)** si el PR 0 no coincide con el inicio del KML.
-5) Puede capturar foto con overlay y **Compartir** o **Descargar**.
-
-**Notas técnicas**
-
-- Para proyectar a coordenadas planas se usa una proyección local equirectangular alrededor del primer vértice
-  (x = R * (lon - lon0) * cos(lat0), y = R * (lat - lat0)). Esto evita dependencias.
-- La distancia geodésica vértice-a-vértice y hacia el pie proyectado se calcula con **haversine**. Con una ruta densificada
-  a 10 m, el error es despreciable para uso vial.
-- La búsqueda del vértice más cercano es lineal O(N). Con ~12k puntos funciona fluido en móviles modernos.
-  Si su ruta tiene cientos de miles de puntos, me avisa y migramos a un KD-tree.
-
+## Pasos
+1) Sube estos archivos al repo (GitHub Pages). Asegúrate de incluir **PRs.csv**.
+2) Abre la página en HTTPS.
+3) Carga el **KML densificado**. La app intentará cargar **PRs.csv** automáticamente.
+4) Activa GPS o ingresa lat/lon; verás `PR`, `dist_origen`, `dist_a_ruta`, etc.
