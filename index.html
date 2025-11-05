@@ -21,7 +21,7 @@
     .value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
     .hint { color:#64748b; font-size:.8rem }
     .warn { color:#fbbf24; font-size:.85rem }
-    button { background: var(--brand); color:#0b1324; font-weight:700; padding:10px 12px; border-radius:10px; border:0; font-size:1rem }
+    button { background: var(--brand); color:#0b1324; font-weight:700; padding:10px 12px; border-radius:10px; border:0; font-size:1rem; cursor:pointer }
     button:active { transform: scale(.98) }
     input.value, input[type=number] { width:100%; background: var(--bg); color: var(--text); border:1px solid var(--b); border-radius:8px; padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     #coords { white-space: pre-line }
@@ -39,7 +39,7 @@
 <body>
   <header>
     <h2>Registro PR</h2>
-    <div class="hint">La app lee <b>PRs.csv</b> directamente del repositorio (misma carpeta que este archivo).</div>
+    <div class="hint">Lee <b>PRs.csv</b> del repo. Si no calcula, refresca fuerte (Ctrl+F5) para actualizar el SW.</div>
   </header>
 
   <section class="card">
@@ -51,7 +51,6 @@
         <span id="tramoBadge" class="pill hidden"></span>
       </div>
       <div id="kmlStatus" class="value">Sin ruta.</div>
-      <div class="hint">El tramo se infiere del nombre, p.ej.: <b>ruta_densa_10m_4505.kml ⇒ TRAMO=4505</b>.</div>
     </div>
   </section>
 
@@ -62,8 +61,7 @@
         <button id="btnLoadRepoPRS">Cargar PRs del repo</button>
         <span id="prsBadge" class="pill hidden"></span>
       </div>
-      <div id="prsStatus" class="value">Esperando cargar PRs.csv…</div>
-      <div class="hint">Debe existir un archivo <b>PRs.csv</b> junto a este <code>index.html</code>.</div>
+      <div id="prsStatus" class="value">Intentando leer PRs.csv…</div>
     </div>
   </section>
 
@@ -71,15 +69,16 @@
     <div class="row">
       <div class="label">3) GPS en vivo</div>
       <div id="state" class="value">Cargando…</div>
-      <div id="coords" class="value">lat: —, lon: —\nprecisión: — m\nvelocidad: — m/s</div>
+      <div id="coords" class="value">lat: —, lon: —
+precisión: — m
+velocidad: — m/s</div>
       <button id="btnEnableGPS" class="hidden">Activar GPS</button>
-      <div class="hint">HTTPS requerido. Si no aparece nada, toca “Activar GPS”.</div>
     </div>
   </section>
 
   <section class="card">
     <div class="row">
-      <div class="label">4) Entrar coordenadas manuales (opcional)</div>
+      <div class="label">4) Coordenadas manuales</div>
       <div class="row-h">
         <input id="latIn" class="value" placeholder="lat" />
         <input id="lonIn" class="value" placeholder="lon" />
@@ -104,9 +103,13 @@
         <video id="video" autoplay playsinline muted></video>
         <div id="overlay">lat: —, lon: — | precisión: — m | vel: — m/s | PR: —</div>
       </div>
-      <div id="cameraCtl" class="row-h">
+      <div class="row-h">
         <button id="btnOpenCam">Abrir cámara</button>
         <button id="btnSnap" disabled>Capturar foto</button>
+      </div>
+      <div id="iosFallback" class="hidden">
+        <div class="warn">iOS PWA: usa el selector del sistema</div>
+        <input id="fileInput" type="file" accept="image/*" capture="environment" />
       </div>
       <img id="previewImg" alt="captura" />
     </div>
@@ -133,10 +136,11 @@
 
 <script>
 const R = 6371000;
+const isHttps = location.protocol === 'https:' || location.hostname === 'localhost';
 function toRad(d){ return d * Math.PI / 180; }
 function haversine(lat1, lon1, lat2, lon2){
   const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
-  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*math.sin(dLon/2)**2;
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 function makeLocalProjector(lat0, lon0){
@@ -156,7 +160,7 @@ function parseCSV(text){
   const rows = [];
   let i=0, cur="", inQ=false; let row=[];
   const pushCell = (cell) => { row.push(cell.replace(/^\ufeff/,"")); };
-  const pushRow = () => { rows.push(row); row=[]; };
+  const pushRow = () => { if (row.length) rows.push(row); row=[]; };
   while (i < text.length){
     const ch = text[i];
     if (inQ){
@@ -164,13 +168,13 @@ function parseCSV(text){
       cur+=ch; i++; continue;
     } else {
       if (ch === '"'){ inQ=true; i++; continue; }
-      if (ch === sep){ pushCell(cur); cur=""; i++; continue; }
-      if (ch === '\n'){ pushCell(cur); cur=""; pushRow(); i++; continue; }
+      if (ch === sep){ row.push(cur); cur=""; i++; continue; }
+      if (ch === '\n'){ row.push(cur); cur=""; pushRow(); i++; continue; }
       if (ch === '\r'){ i++; continue; }
       cur += ch; i++;
     }
   }
-  if (cur.length || row.length){ pushCell(cur); pushRow(); }
+  if (cur.length || row.length){ row.push(cur); pushRow(); }
   const header = rows.shift().map(h => h.trim());
   return rows.map(r => { const o={}; r.forEach((v,idx)=>o[header[idx]]=(v??"").trim()); return o; });
 }
@@ -181,22 +185,13 @@ function numOrNaN(x){
   const v = Number(s);
   return Number.isFinite(v) ? v : NaN;
 }
+function log(msg){ console.log(msg); document.getElementById('log').textContent = msg; }
 
-// State
 let locator = null;
 let tramoActual = null;
 let prsIndex = new Map();
 let lastCoords = null, watchId = null;
-const stateEl = document.getElementById('state');
-const coordsEl = document.getElementById('coords');
-const resultEl = document.getElementById('result');
-const overlayEl = document.getElementById('overlay');
-const prField = document.getElementById('prField');
-const tramoBadge = document.getElementById('tramoBadge');
-const prsBadge = document.getElementById('prsBadge');
-const logEl = document.getElementById('log');
 
-function log(msg){ console.log(msg); if (logEl) logEl.textContent = msg; }
 function inferTramoFromKMLName(name){ const m = name.match(/ruta_densa_10m_([\w-]+)\.kml$/i); return m ? m[1].toUpperCase() : null; }
 
 async function loadPRsFromRepo(){
@@ -221,18 +216,18 @@ async function loadPRsFromRepo(){
     }
     const nTramos = prsIndex.size;
     const totalPRS = [...prsIndex.values()].reduce((acc,v)=> acc + v.dist.length, 0);
-    document.getElementById('prsStatus').innerHTML = `<span class="ok">PRs cargados del repo.</span> Tramos: ${nTramos}, filas: ${totalPRS}.`;
-    prsBadge.textContent = 'PRs.csv cargado';
-    prsBadge.classList.remove('hidden');
+    document.getElementById('prsStatus').innerHTML = `<span class="ok">PRs.csv cargado.</span> Tramos: ${nTramos}, filas: ${totalPRS}.`;
+    const badge = document.getElementById('prsBadge');
+    badge.textContent = 'PRs OK';
+    badge.classList.remove('hidden');
+    if (locator && lastCoords){ const res = distanceFromOrigin(lastCoords.latitude, lastCoords.longitude, locator); renderResult(res); }
   }catch(e){
-    document.getElementById('prsStatus').innerHTML = '<span class="bad">No se pudo leer PRs.csv del repo: '+ e.message +'</span>';
+    document.getElementById('prsStatus').innerHTML = '<span class="bad">No se pudo leer PRs.csv: '+ e.message +'</span>';
   }
 }
 document.getElementById('btnLoadRepoPRS').addEventListener('click', loadPRsFromRepo);
-// Auto-carga al iniciar
 loadPRsFromRepo();
 
-// KML + locator
 async function parseKML(file){
   const text = await file.text();
   const xml = new DOMParser().parseFromString(text, "application/xml");
@@ -294,7 +289,57 @@ function distanceFromOrigin(lat, lon, loc){
   return { distance_from_origin_m: distFromOrigin, distance_to_route_m: dToRoute, nearest_latlon:[projLat,projLon], segment_index:i0 };
 }
 
-// Manual
+function buscarPRPorDist(tramo, objetivoM){
+  const reg = prsIndex.get(tramo);
+  if (!reg) return null;
+  const distArr = reg.dist, prArr = reg.pr;
+  let lo=0, hi=distArr.length;
+  while (lo < hi){ const mid=(lo+hi)>>1; if (distArr[mid] <= objetivoM) lo = mid+1; else hi = mid; }
+  const pos = lo-1;
+  if (pos < 0) return null;
+  const baseDist = distArr[pos];
+  const basePR = prArr[pos];
+  const metros = objetivoM - baseDist;
+  return { basePR, metros: Math.round(metros), baseDist };
+}
+function renderResult(res){
+  const resultEl = document.getElementById('result');
+  const overlay = document.getElementById('overlay');
+  if (!res){ resultEl.textContent = '—'; return; }
+  const dBase = res.distance_from_origin_m;
+  const offset = Number(document.getElementById('offsetm').value||0);
+  const objetivo = dBase + (Number.isFinite(offset)? offset : 0);
+  let prTxt = '—';
+  if (tramoActual && prsIndex.has(tramoActual)){
+    const it = buscarPRPorDist(tramoActual, objetivo);
+    if (it){
+      const mm = String(Math.max(0, it.metros)).padStart(3,'0');
+      prTxt = `${String(it.basePR).replace(/\s+/g,'')}+${mm}`;
+      if (!document.getElementById('prField').value) document.getElementById('prField').value = `PR_${prTxt}`;
+    } else {
+      prTxt = 'Sin PR para esa distancia';
+    }
+  } else {
+    prTxt = 'Falta PRs.csv o TRAMO.';
+  }
+  const dRoute = res.distance_to_route_m;
+  const [nlat,nlon] = res.nearest_latlon;
+  resultEl.textContent =
+`dist_origen: ${dBase.toFixed(2)} m
+dist_a_ruta: ${dRoute.toFixed(2)} m
+pie: lat ${nlat.toFixed(6)}, lon ${nlon.toFixed(6)}
+segmento: ${res.segment_index}
+TRAMO: ${tramoActual ?? '—'}
+PR: ${prTxt}`;
+  if (lastCoords){
+    const lat = lastCoords.latitude.toFixed(6);
+    const lon = lastCoords.longitude.toFixed(6);
+    const acc = (lastCoords.accuracy ?? NaN).toFixed(1);
+    overlay.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m | PR: ${prTxt}`;
+  }
+}
+
+// Bindings
 document.getElementById('btnLoadKML').addEventListener('click', async () => {
   try{
     const f = document.getElementById('kmlFile').files?.[0];
@@ -305,6 +350,7 @@ document.getElementById('btnLoadKML').addEventListener('click', async () => {
     tramoActual = inferTramoFromKMLName(f.name);
     const tb = document.getElementById('tramoBadge');
     if (tramoActual){ tb.textContent = 'TRAMO: ' + tramoActual; tb.classList.remove('hidden'); } else { tb.classList.add('hidden'); }
+    if (lastCoords){ const res = distanceFromOrigin(lastCoords.latitude, lastCoords.longitude, locator); renderResult(res); }
   }catch(e){
     document.getElementById('kmlStatus').innerHTML = '<span class="bad">Error: '+ e.message +'</span>';
   }
@@ -316,9 +362,13 @@ document.getElementById('btnCalc').addEventListener('click', () => {
   const res = distanceFromOrigin(lat, lon, locator);
   renderResult(res);
 });
+document.getElementById('btnLoadRepoPRS').addEventListener('click', loadPRsFromRepo);
+loadPRsFromRepo();
 
 // GPS
 function startWatchPosition(){
+  const stateEl = document.getElementById('state');
+  if (!isHttps){ stateEl.textContent = 'GPS requiere HTTPS (usa GitHub Pages).'; return; }
   if (!navigator.geolocation) { stateEl.textContent = 'Geolocalización no soportada.'; return; }
   try {
     if (watchId !== null) navigator.geolocation.clearWatch(watchId);
@@ -330,7 +380,7 @@ function startWatchPosition(){
       const acc = (accuracy ?? NaN).toFixed(1);
       const vel = (speed ?? 0);
       const velFmt = (isFinite(vel) ? vel.toFixed(2) : '—');
-      coordsEl.textContent = `lat: ${lat}, lon: ${lon}\nprecisión: ${acc} m\nvelocidad: ${velFmt} m/s`;
+      document.getElementById('coords').textContent = `lat: ${lat}, lon: ${lon}\nprecisión: ${acc} m\nvelocidad: ${velFmt} m/s`;
       if (locator){
         const res = distanceFromOrigin(latitude, longitude, locator);
         renderResult(res);
@@ -349,34 +399,55 @@ startWatchPosition();
 document.getElementById('btnEnableGPS').addEventListener('click', () => {
   navigator.geolocation.getCurrentPosition(
     () => { document.getElementById('btnEnableGPS').classList.add('hidden'); startWatchPosition(); },
-    (err) => { stateEl.textContent = 'GPS denegado: ' + err.message; },
+    (err) => { document.getElementById('state').textContent = 'GPS denegado: ' + err.message; },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
 });
 
-// Cámara
+// Cámara + iOS fallback
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
 async function openCameraStream(){
-  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ return; }
+  const videoWrap = document.getElementById('videoWrap');
+  const btnSnap = document.getElementById('btnSnap');
+  const stateEl = document.getElementById('state');
+  const iosFallback = document.getElementById('iosFallback');
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+    if (isIOS){ iosFallback.classList.remove('hidden'); stateEl.textContent = 'Cámara no disponible en PWA iOS: usa selector.'; }
+    else { stateEl.textContent = 'Cámara no soportada en este navegador.'; }
+    return;
+  }
   try {
     const constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    videoEl.srcObject = stream;
-    document.getElementById('videoWrap').style.display = 'block';
+    document.getElementById('video').srcObject = stream;
+    videoWrap.style.display = 'block';
     btnSnap.disabled = false;
     stateEl.textContent = 'Cámara en vivo activa.';
   } catch (e) {
-    stateEl.textContent = 'No se pudo abrir la cámara: ' + e.message;
+    if (isIOS && isStandalone){
+      iosFallback.classList.remove('hidden');
+      stateEl.textContent = 'iOS (PWA): permiso de cámara denegado o no soportado. Usa selector.';
+    } else {
+      stateEl.textContent = 'No se pudo abrir la cámara: ' + e.message;
+    }
   }
 }
-btnOpenCam.addEventListener('click', openCameraStream);
+document.getElementById('btnOpenCam').addEventListener('click', openCameraStream);
 
-btnSnap.addEventListener('click', () => {
-  if (!videoEl.videoWidth) { log('Video no listo'); return; }
+document.getElementById('btnSnap').addEventListener('click', () => {
+  const video = document.getElementById('video');
+  const previewImg = document.getElementById('previewImg');
+  const prField = document.getElementById('prField');
+  const btnDownload = document.getElementById('btnDownload');
+  const btnShare = document.getElementById('btnShare');
+  if (!video.videoWidth) { log('Video no listo'); return; }
   const canvas = document.createElement('canvas');
-  canvas.width = videoEl.videoWidth;
-  canvas.height = videoEl.videoHeight;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(videoEl, 0, 0);
+  ctx.drawImage(video, 0, 0);
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   const barH = Math.round(canvas.height * 0.07);
   ctx.fillRect(0, canvas.height - barH, canvas.width, barH);
@@ -389,30 +460,46 @@ btnSnap.addEventListener('click', () => {
     previewImg.src = url;
     previewImg.style.display = 'block';
     btnDownload.disabled = false;
-    // share support
     const name = (prField.value || 'PR_sin_nombre').trim() + '.jpg';
     const fileObj = new File([blob], name, { type:'image/jpeg' });
     btnShare.disabled = !(navigator.canShare && navigator.canShare({ files: [fileObj] }));
-    btnShare.onclick = async () => {
-      try { await navigator.share({ files: [fileObj], title: name, text: 'Captura PR' }); } catch {}
-    };
-    btnDownload.onclick = () => {
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      a.click();
-      URL.revokeObjectURL(url);
-    };
+    btnShare.onclick = async () => { try { await navigator.share({ files: [fileObj], title: name, text: 'Captura PR' }); } catch {} };
+    btnDownload.onclick = () => { const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url); };
   }, 'image/jpeg', 0.92);
 });
 
-btnReset.addEventListener('click', () => {
-  previewImg.style.display = 'none'; previewImg.src = '';
-  btnDownload.disabled = true; btnShare.disabled = true;
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    const barH = Math.round(canvas.height * 0.07);
+    ctx.fillRect(0, canvas.height - barH, canvas.width, barH);
+    ctx.fillStyle = '#fff';
+    const fontSize = Math.max(18, Math.round(canvas.width * 0.03));
+    ctx.font = `${fontSize}px ui-monospace, Menlo, monospace`;
+    ctx.fillText(document.getElementById('overlay').textContent, Math.round(canvas.width*0.02), canvas.height - Math.round(barH*0.35));
+    canvas.toBlob((blob) => {
+      const out = URL.createObjectURL(blob);
+      document.getElementById('previewImg').src = out;
+      document.getElementById('previewImg').style.display = 'block';
+      document.getElementById('btnDownload').disabled = false;
+    }, 'image/jpeg', 0.92);
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
 });
 
-// SW
-if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./service-worker.js').catch(()=>{}); }
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+}
 </script>
 </body>
 </html>
