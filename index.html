@@ -417,12 +417,16 @@ async function openCameraStream(){
   const stateEl = document.getElementById('state');
   const iosFallback = document.getElementById('iosFallback');
   const videoEl = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
 
+  // Comprobamos si el navegador soporta getUserMedia
   if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
     if (isIOS){ iosFallback.classList.remove('hidden'); stateEl.textContent = 'Cámara no disponible en PWA iOS: usa selector.'; }
     else { stateEl.textContent = 'Cámara no soportada en este navegador.'; }
     return;
   }
+
+  // Si es posible acceder a la cámara, configuramos el stream
   try {
     const constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -430,6 +434,32 @@ async function openCameraStream(){
     videoWrap.style.display = 'block';
     btnSnap.disabled = false;
     stateEl.textContent = 'Cámara en vivo activa.';
+
+    // Cada vez que el video se actualice, también se actualizarán las coordenadas y otros datos
+    stream.getTracks().forEach(track => {
+      track.onended = () => {
+        stateEl.textContent = 'Cámara detenida';
+      };
+    });
+
+    // Aquí es donde actualizamos el overlay constantemente con las coordenadas
+    const updateOverlay = () => {
+      if (lastCoords) {
+        const lat = lastCoords.latitude.toFixed(6);
+        const lon = lastCoords.longitude.toFixed(6);
+        const acc = (lastCoords.accuracy ?? NaN).toFixed(1);
+        const vel = (lastCoords.speed ?? 0);
+        const velFmt = (isFinite(vel) ? vel.toFixed(2) : '—');
+
+        overlay.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m | vel: ${velFmt} m/s`;
+      }
+    };
+
+    // Actualizar la información cada segundo mientras la cámara está activa
+    const overlayInterval = setInterval(updateOverlay, 1000);
+    
+    // Limpiar intervalos cuando se detiene el stream
+    stream.oninactive = () => clearInterval(overlayInterval);
   } catch (e) {
     if (isIOS && isStandalone){
       iosFallback.classList.remove('hidden');
@@ -439,6 +469,8 @@ async function openCameraStream(){
     }
   }
 }
+
+// Llamar a esta función cuando se haga clic en "Abrir cámara"
 document.getElementById('btnOpenCam').addEventListener('click', openCameraStream);
 
 document.getElementById('btnSnap').addEventListener('click', () => {
