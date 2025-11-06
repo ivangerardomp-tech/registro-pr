@@ -454,13 +454,23 @@ async function openCameraStream(){
         const acc = (lastCoords.accuracy ?? NaN).toFixed(1);
         const vel = (lastCoords.speed ?? 0);
         const velFmt = (isFinite(vel) ? vel.toFixed(2) : '—');
-        const prTxt = tramoActual ? `PR: ${tramoActual}` : 'PR: —';
 
         // Actualizamos la primera línea con lat, lon y precisión
         coordsLine.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m`;
 
-        // Actualizamos la segunda línea con velocidad y PR
-        speedPRLine.textContent = `vel: ${velFmt} m/s | ${prTxt}`;
+        // Aquí vamos a buscar el PR usando la distancia desde el origen
+        let prTxt = 'PR: —';
+        if (tramoActual && prsIndex.has(tramoActual)) {
+          const distFromOrigin = cumulativeGeodesic(locator.cum); // Usamos la distancia acumulada
+          const prData = buscarPRPorDist(tramoActual, distFromOrigin); // Calculamos PR por distancia
+
+          if (prData) {
+            prTxt = `PR: ${prData.basePR} + ${prData.metros}`;
+          }
+        }
+
+        // Actualizamos la segunda línea con velocidad, TRAMO y PR
+        speedPRLine.textContent = `vel: ${velFmt} m/s | TRAMO: ${tramoActual ?? '—'} | ${prTxt}`;
       }
     };
 
@@ -478,6 +488,7 @@ async function openCameraStream(){
     }
   }
 }
+
 
 // Llamar a esta función cuando se haga clic en "Abrir cámara"
 document.getElementById('btnOpenCam').addEventListener('click', openCameraStream);
