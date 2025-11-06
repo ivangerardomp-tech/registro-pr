@@ -343,7 +343,7 @@ PR: ${prTxt}`;
     const lon = lastCoords.longitude.toFixed(6);
     const acc = (lastCoords.accuracy ?? NaN).toFixed(1);
     const vel = lastCoords.speed; const velFmt = (isFinite(vel)? vel.toFixed(2) : '—');
-    overlay.textContent = `lat: ${lat}, lon: ${lon} | RN: ${tramoActual ?? '—'} | PR: ${prTxt}`;
+    overlay.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m | vel: ${velFmt} m/s | TRAMO: ${tramoActual ?? '—'} | PR: ${prTxt}`;
   }
 }
 
@@ -385,7 +385,9 @@ function startWatchPosition(){
       const acc = (accuracy ?? NaN).toFixed(1);
       const vel = (speed ?? 0);
       const velFmt = (isFinite(vel) ? vel.toFixed(2) : '—');
-      document.getElementById('coords').textContent = `lat: ${lat}, lon: ${lon};
+      document.getElementById('coords').textContent = `lat: ${lat}, lon: ${lon}
+precisión: ${acc} m
+velocidad: ${velFmt} m/s`;
       if (locator){
         const res = distanceFromOrigin(latitude, longitude, locator);
         renderResult(res);
@@ -454,7 +456,7 @@ async function openCameraStream(){
         const velFmt = (isFinite(vel) ? vel.toFixed(2) : '—');
 
         // Actualizamos la primera línea con lat, lon y precisión
-        coordsLine.textContent = `lat: ${lat}, lon: ${lon};
+        coordsLine.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m`;
 
         // Aquí vamos a buscar el PR usando la distancia desde el origen
         let prTxt = 'PR: —';
