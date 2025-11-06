@@ -423,6 +423,10 @@ async function openCameraStream(){
   const coordsLine = document.getElementById('coordsLine');
   const speedPRLine = document.getElementById('speedPRLine');
 
+  // Inicializamos el overlay con valores predeterminados
+  coordsLine.textContent = 'Esperando KML...';
+  speedPRLine.textContent = 'Esperando KML...';
+
   // Comprobamos si el navegador soporta getUserMedia
   if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
     if (isIOS){ iosFallback.classList.remove('hidden'); stateEl.textContent = 'Cámara no disponible en PWA iOS: usa selector.'; }
@@ -559,6 +563,7 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
 });
 
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./service-worker.js').catch(()=>{}); }
+
 
 </script>
 </body>
