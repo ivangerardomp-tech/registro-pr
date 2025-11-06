@@ -1,6 +1,6 @@
 {
-  "name": "Registro PR Live (Repo KML)",
-  "short_name": "PR Live",
+  "name": "Registro PR (KML + PRs del repo)",
+  "short_name": "Registro PR",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f172a",
