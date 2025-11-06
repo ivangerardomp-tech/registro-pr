@@ -105,7 +105,10 @@ velocidad: — m/s</div>
       <div id="videoWrap">
         <div id="topBadge">Cámara activa</div>
         <video id="video" autoplay playsinline muted></video>
-        <div id="overlay">lat: —, lon: — | precisión: — m | vel: — m/s | PR: —</div>
+        <div id="overlay">
+          <span id="coordsLine"></span><br>
+          <span id="speedPRLine"></span>
+        </div>
       </div>
       <div class="row-h">
         <button id="btnOpenCam">Abrir cámara</button>
@@ -417,7 +420,8 @@ async function openCameraStream(){
   const stateEl = document.getElementById('state');
   const iosFallback = document.getElementById('iosFallback');
   const videoEl = document.getElementById('video');
-  const overlay = document.getElementById('overlay');
+  const coordsLine = document.getElementById('coordsLine');
+  const speedPRLine = document.getElementById('speedPRLine');
 
   // Comprobamos si el navegador soporta getUserMedia
   if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
@@ -442,7 +446,7 @@ async function openCameraStream(){
       };
     });
 
-    // Aquí es donde actualizamos el overlay constantemente con las coordenadas
+    // Aquí es donde actualizamos las dos líneas de información
     const updateOverlay = () => {
       if (lastCoords) {
         const lat = lastCoords.latitude.toFixed(6);
@@ -450,8 +454,13 @@ async function openCameraStream(){
         const acc = (lastCoords.accuracy ?? NaN).toFixed(1);
         const vel = (lastCoords.speed ?? 0);
         const velFmt = (isFinite(vel) ? vel.toFixed(2) : '—');
+        const prTxt = tramoActual ? `PR: ${tramoActual}` : 'PR: —';
 
-        overlay.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m | vel: ${velFmt} m/s`;
+        // Actualizamos la primera línea con lat, lon y precisión
+        coordsLine.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m`;
+
+        // Actualizamos la segunda línea con velocidad y PR
+        speedPRLine.textContent = `vel: ${velFmt} m/s | ${prTxt}`;
       }
     };
 
