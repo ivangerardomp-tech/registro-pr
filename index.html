@@ -451,12 +451,9 @@ async function openCameraStream(){
       if (lastCoords) {
         const lat = lastCoords.latitude.toFixed(6);
         const lon = lastCoords.longitude.toFixed(6);
-        const acc = (lastCoords.accuracy ?? NaN).toFixed(1);
-        const vel = (lastCoords.speed ?? 0);
-        const velFmt = (isFinite(vel) ? vel.toFixed(2) : '—');
-
-        // Actualizamos la primera línea con lat, lon y precisión
-        coordsLine.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m`;
+        
+        // Actualizamos la primera línea con lat, lon
+        coordsLine.textContent = `lat: ${lat}, lon: ${lon}`;
 
         // Aquí vamos a buscar el PR usando la distancia desde el origen
         let prTxt = 'PR: —';
@@ -469,8 +466,10 @@ async function openCameraStream(){
           }
         }
 
-        // Actualizamos la segunda línea con velocidad, TRAMO y PR
-        speedPRLine.textContent = `vel: ${velFmt} m/s | TRAMO: ${tramoActual ?? '—'} | ${prTxt}`;
+        // Actualizamos la segunda línea con TRAMO y PR
+        const date = new Date();
+        const dateString = date.toLocaleString(); // Obtiene la fecha y hora actual
+        speedPRLine.textContent = `TRAMO: ${tramoActual ?? '—'} | ${prTxt} | Fecha: ${dateString}`;
       }
     };
 
@@ -489,7 +488,6 @@ async function openCameraStream(){
   }
 }
 
-
 // Llamar a esta función cuando se haga clic en "Abrir cámara"
 document.getElementById('btnOpenCam').addEventListener('click', openCameraStream);
 
@@ -499,6 +497,9 @@ document.getElementById('btnSnap').addEventListener('click', () => {
   const prField = document.getElementById('prField');
   const btnDownload = document.getElementById('btnDownload');
   const btnShare = document.getElementById('btnShare');
+  const date = new Date();
+  const dateString = date.toLocaleString(); // Fecha y hora actual
+
   if (!videoEl.videoWidth) { log('Video no listo'); return; }
   const canvas = document.createElement('canvas');
   canvas.width = videoEl.videoWidth;
@@ -511,7 +512,10 @@ document.getElementById('btnSnap').addEventListener('click', () => {
   ctx.fillStyle = '#fff';
   const fontSize = Math.max(18, Math.round(canvas.width * 0.03));
   ctx.font = `${fontSize}px ui-monospace, Menlo, monospace`;
-  ctx.fillText(document.getElementById('overlay').textContent, Math.round(canvas.width*0.02), canvas.height - Math.round(barH*0.35));
+
+  // Colocamos la fecha y hora en la imagen capturada
+  ctx.fillText(`Fecha y Hora: ${dateString}`, Math.round(canvas.width*0.02), canvas.height - Math.round(barH*0.35));
+
   canvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     previewImg.src = url;
@@ -542,7 +546,7 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
     ctx.fillStyle = '#fff';
     const fontSize = Math.max(18, Math.round(canvas.width * 0.03));
     ctx.font = `${fontSize}px ui-monospace, Menlo, monospace`;
-    ctx.fillText(document.getElementById('overlay').textContent, Math.round(canvas.width*0.02), canvas.height - Math.round(barH*0.35));
+    ctx.fillText(`Fecha y Hora: ${dateString}`, Math.round(canvas.width*0.02), canvas.height - Math.round(barH*0.35));
     canvas.toBlob((blob) => {
       const out = URL.createObjectURL(blob);
       document.getElementById('previewImg').src = out;
@@ -555,6 +559,7 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
 });
 
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./service-worker.js').catch(()=>{}); }
+
 </script>
 </body>
 </html>
