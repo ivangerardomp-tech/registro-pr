@@ -1,5 +1,6 @@
-# Registro PR v17 (corrigido iOS y Service Worker)
-- Corrección de `meta` de iOS para PWA: `<meta name="mobile-web-app-capable" content="yes">`
-- Solución al error en Service Worker sobre clonar respuesta de `fetch`.
-- Continuación del proceso para seleccionar TRAMO, leer PRs.csv y cargar KML.
-- Ajustes de cámara, GPS y cálculo de PR en base a las coordenadas.
+# Registro PR v16 (fusionado)
+- Selección de TRAMO desde PRs.csv (repo) y carga del `TRAMO.kml` desde el mismo repo.
+- Mantiene cámara, GPS, overlay, captura con barra y texto, compartir/descargar.
+- Parser CSV robusto (TAB/;/,) y encabezados insensibles a mayúsculas/espacios.
+- Cambia `KML_BASE` a `./kml/` si los KML están en subcarpeta.
+- Service Worker con caché `registro-pr-cache-v16`.

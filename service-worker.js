@@ -1,6 +1,6 @@
-// SW cache v17 (network-first para PRs.csv y *.kml)
-const CACHE_NAME = "registro-pr-cache-v17";
-const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./PRs.csv"];
+// SW cache v16 (network-first para PRs.csv y *.kml)
+const CACHE_NAME = "registro-pr-cache-v16";
+const ASSETS = ["./","./index.html","./manifest.json","./icon-192.png","./icon-512.png","./PRs.csv"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
@@ -20,9 +20,7 @@ self.addEventListener("fetch", e => {
   if (url.pathname.endsWith("/PRs.csv") || url.pathname.endsWith("PRs.csv") || url.pathname.toLowerCase().endsWith(".kml")) {
     e.respondWith(
       fetch(e.request).then(r => {
-        // Clone response before caching it
-        const clonedResponse = r.clone();
-        caches.open(CACHE_NAME).then(c => c.put(e.request, clonedResponse));
+        caches.open(CACHE_NAME).then(c => c.put(e.request, r.clone()));
         return r;
       }).catch(() => caches.match(e.request))
     );
