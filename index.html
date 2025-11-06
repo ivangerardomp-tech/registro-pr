@@ -343,7 +343,7 @@ PR: ${prTxt}`;
     const lon = lastCoords.longitude.toFixed(6);
     const acc = (lastCoords.accuracy ?? NaN).toFixed(1);
     const vel = lastCoords.speed; const velFmt = (isFinite(vel)? vel.toFixed(2) : '—');
-    overlay.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m | vel: ${velFmt} m/s | PR: ${prTxt}`;
+    overlay.textContent = `lat: ${lat}, lon: ${lon} | precisión: ${acc} m | vel: ${velFmt} m/s | TRAMO: ${tramoActual ?? '—'} | PR: ${prTxt}`;
   }
 }
 
